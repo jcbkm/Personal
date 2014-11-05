@@ -1,0 +1,1543 @@
+/*
+    This class is used to display Skills and Education Tab for Partner Portal
+*/
+
+/*
+    Code Log 
+  =====================================================================================================
+  Date              Owner               Comment
+  =====================================================================================================
+  03-Dec-2012     Devendra Sawant      Initial draft
+  18-Dec-2012     Devendra Sawant
+  9-Jan-2013      Kiran Patil          SCA-328 - skills and education count
+  16-jan-2013     Niket chandane       SCA-351
+  23-Jan-2013     Devendra Sawant      SCA-388
+    
+*/
+public with sharing class SkillsEducationPartnerController {
+    public SkillsEducationWrapper SkillsEducationWrapper{get;set;}
+    public Position__c position{get;set;}
+    public String recordType {get;set;}
+    public String selectedSkills{get;set;}
+    public String selectedEducations{get;set;}
+    public Boolean bErrorMsg{get;set;}
+    public Boolean chkStart{get;set;}
+    public Boolean chkEnd{get;set;}
+    public String step1{get;set;}
+    public String step2{get;set;}
+    List<Position__c> lstPosition;
+    String positionId;
+    
+    // Start Constructor
+    public SkillsEducationPartnerController(){
+        positionId = ApexPages.CurrentPage().getParameters().get('posId');
+        recordType = ApexPages.CurrentPage().getParameters().get('RecordType');
+        
+        SkillsEducationWrapper = new SkillsEducationWrapper();
+        if(positionId != null)
+        {
+            // Gather Position Information
+            retrievePosition();
+            displayMsg();
+            
+            if(Position.Actual_End_Date__c == null){
+                    chkEnd = false;
+            }else{
+                    chkEnd = true;
+            }
+            if(Position.Actual_Start_Date__c == null){
+                chkStart = false;
+            }
+            else{
+                chkStart = true;
+            }
+            
+            RecordType = System.currentPagereference().getParameters().get('RecordType');
+            step1 = System.currentPagereference().getParameters().get('Step');
+            if(RecordType == 'Internship/Corps Position Request')
+            {
+               Step2 = '8';               
+            }
+            if(RecordType == 'Community Position Request')
+            {
+                Step2 = '7';
+            }
+            if(RecordType == 'Crew Position Request')
+            {
+                Step2 = '7';
+            }
+            if(RecordType == 'Leader Position Request')
+            {
+                Step2 = '7';
+            }
+            
+            retriveSelectedSkillsAndEducation(SkillsEducationWrapper);
+        }
+    }
+    
+    // Retrieve list of all Createable Position fields
+    public void retrievePosition(){
+        String strFields = '';
+        SObjectType sObj = Schema.getGlobalDescribe().get('Position__c');
+        List<Schema.SObjectField> lstFields = sObj.getDescribe().fields.getMap().values();
+        for(Schema.SobjectField so: lstFields){
+            Schema.DescribeFieldResult dfr = so.getDescribe();
+            strFields += dfr.getName() + ',';
+        }
+        System.debug('strFields: '+strFields);
+        
+        if(strFields.endsWith(',')){
+            strFields = strFields.subString(0,strFields.lastIndexOf(','));
+        }
+        String strQuery = 'Select '+strFields+' From Position__c where Id =: positionId';
+        List<Position__c> lstPosition = Database.query(strQuery);
+        if(lstPosition.size()>0){
+             position = lstPosition[0];
+         }
+         else {
+            lstPosition = new  List<Position__c>();
+            position = new Position__c();
+            Error.LogError(Label.Partner_Portal_Position_Not_Found_Message); 
+         }        
+    }
+    
+    // This method is called on to move to previous page from first page of Skills and Education Partner
+    public Pagereference movePreviousSkillEducationPartnerPage1(){
+        Pagereference pg;
+        positionId = ApexPages.CurrentPage().getParameters().get('PosId');
+        if(positionId != null && positionId !=''){
+            if(SCA_Utility.validateId(positionId)){
+                try{
+                    position.SelectedSkillsAndEducation__c = saveSelectedSkillsAndEducationInLongTextArea(SkillsEducationWrapper);
+                    
+                    // Update not selected skills and education fields to empty 
+                    resetUnSelectedSkillsAndEducationFields(SkillsEducationWrapper,position);
+                    
+                    position.Selected_Skills_Count__c = countSkills(SkillsEducationWrapper);
+                    position.Selected_Educations_Count__c = countEducations(SkillsEducationWrapper);
+                    update position;
+                    pg = System.Page.PositionLogistics;
+                    pg.getParameters().put('PosId',positionId);
+                    pg.getParameters().put('RecordType',RecordType);
+                    pg.getParameters().put('Step','2');
+                    pg.setRedirect(true);
+                    return pg;
+                }catch(Exception objEx){
+                    ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, objEx.getMessage()));
+                    return null;
+                }
+            }else{
+                Error.LogError(Label.Partner_Portal_Position_Not_Found_Message); 
+                return null;
+            }
+        }else{
+            Error.LogError(Label.Partner_Portal_Position_Not_Found_Message); 
+            return null;
+        }
+    }
+    
+    // This method is called on to move to previous page from Second page of Skills and Education Partner
+    public Pagereference movePreviousSkillEducationPartnerPage2(){
+        Pagereference pg;
+        positionId = ApexPages.CurrentPage().getParameters().get('PosId');
+        if(positionId != null && positionId !=''){
+            if(SCA_Utility.validateId(positionId)){
+                try{
+                    update position;
+                    pg = System.Page.SkillsEducationPartner;
+                    pg.getParameters().put('PosId',positionId);
+                    pg.getParameters().put('RecordType',RecordType);
+                    pg.getParameters().put('Step','3');
+                    pg.setRedirect(false);
+                    return pg;
+                }catch(Exception objEx){
+                    ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, objEx.getMessage()));
+                    return null;
+                }
+            }else{
+                Error.LogError(Label.Partner_Portal_Position_Not_Found_Message); 
+                return null;
+            }
+        }else{
+            Error.LogError(Label.Partner_Portal_Position_Not_Found_Message); 
+            return null;
+        }
+    }
+    
+    // This method is called on to save Skills and Education Partner on first Page of Skills And Education
+    public Pagereference saveSkillsEducationPartnerPage1(){
+        positionId = ApexPages.CurrentPage().getParameters().get('PosId');
+       
+        Pagereference pg;
+        if(positionId != null && positionId !=''){
+            if(SCA_Utility.validateId(positionId)){
+                try{
+                    if(countSkills(SkillsEducationWrapper) > 5 || countEducations(SkillsEducationWrapper) > 5){
+                        Error.LogError(Label.Partner_Portal_SkillsEducationSelectionLimit_ErrorMessage);
+                        return null;
+                    }else{
+                        position.SelectedSkillsAndEducation__c = saveSelectedSkillsAndEducationInLongTextArea(SkillsEducationWrapper);
+                        
+                        // Update not selected skills and education fields to empty 
+                        resetUnSelectedSkillsAndEducationFields(SkillsEducationWrapper,position);
+                        
+                        position.Selected_Skills_Count__c = countSkills(SkillsEducationWrapper);
+                        position.Selected_Educations_Count__c = countEducations(SkillsEducationWrapper);
+                        update position;
+                        
+                        pg = System.Page.SkillsEducationPartner;
+                        pg.getParameters().put('PosId',positionId);
+                        pg.getParameters().put('RecordType',RecordType);
+                        pg.getParameters().put('Step','3');
+                        pg.setRedirect(false);
+                        return pg;
+                    }     
+                }catch(Exception objEx){
+                    ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, objEx.getMessage()));
+                    return null;
+                }/*
+                pg = System.Page.SkillsEducationPartner;
+                pg.getParameters().put('PosId',PositionId);
+                pg.getParameters().put('RecordType',RecordType);
+                pg.getParameters().put('Step','3');
+                pg.setRedirect(true);
+                return pg;
+                */
+            }else{
+                Error.LogError(Label.Partner_Portal_Position_Not_Found_Message);
+                return null;
+            }
+        }else{
+            Error.LogError(Label.Partner_Portal_Position_Not_Found_Message);
+            return null;
+        }
+    }
+    
+    // This method is called on to save Skills and Education Partner on Second Page of Skills And Education
+    public Pagereference saveSkillsEducationPartnerPage2(){
+        String skills, educations;
+        positionId = ApexPages.CurrentPage().getParameters().get('PosId');
+        Pagereference pg;
+        if(positionId != null && positionId !=''){
+            if(SCA_Utility.validateId(positionId)){
+                try{
+                        update position;
+                }catch(Exception objEx){
+                    ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, objEx.getMessage()));
+                    return null;
+                }
+                /*
+                     Updated By : Niket Chandane
+                     Updated At : 20 Dec 2012
+                     Summary    : SCA-241 
+                */
+                pg = System.Page.SkillsEducationPartnerPage2;
+                pg.getParameters().put('PosId',PositionId);
+                pg.getParameters().put('RecordType',RecordType);
+                pg.getParameters().put('Step','3');
+                pg.setRedirect(false);
+                return pg;
+            }else{
+                Error.LogError(Label.Partner_Portal_Position_Not_Found_Message);
+                return null;
+            }
+        }else{
+            Error.LogError(Label.Partner_Portal_Position_Not_Found_Message);
+            return null;
+        }
+    }  
+    
+    // This method is called on to save and move next step from first page of Skills and Education
+    public Pagereference saveSkillsEducationPartnerAndMoveNextPage1(){
+        Pagereference pg;
+        positionId = ApexPages.CurrentPage().getParameters().get('PosId');
+        system.debug('positionId=>'+positionId);
+        if(positionId != null && positionId !=''){
+            if(SCA_Utility.validateId(positionId)){
+                try{
+                     system.debug('SkillsEducationWrapper==>'+SkillsEducationWrapper);
+                    if(countSkills(SkillsEducationWrapper) > 5 || countEducations(SkillsEducationWrapper) > 5){
+                        Error.LogError(Label.Partner_Portal_SkillsEducationSelectionLimit_ErrorMessage);
+                        //pg.setRedirect(false);
+                        return null;
+                    }
+                    else
+                    if(countSkills(SkillsEducationWrapper) <= 0 && countEducations(SkillsEducationWrapper) <= 0)
+                    {
+                        position.SelectedSkillsAndEducation__c = saveSelectedSkillsAndEducationInLongTextArea(SkillsEducationWrapper);
+                        
+                        // Update not selected skills and education fields to empty 
+                        resetUnSelectedSkillsAndEducationFields(SkillsEducationWrapper,position);
+                        
+                        position.Selected_Skills_Count__c = countSkills(SkillsEducationWrapper);
+                        position.Selected_Educations_Count__c = countEducations(SkillsEducationWrapper);
+                        update position;
+                        pg =System.Page.work_location;
+                        pg.getParameters().put('PosId',positionId);
+                        pg.getParameters().put('RecordType',RecordType);
+                        pg.getParameters().put('Step','4');
+                        pg.setRedirect(true);
+                        return pg;
+                    }
+                    else{
+                        position.SelectedSkillsAndEducation__c = saveSelectedSkillsAndEducationInLongTextArea(SkillsEducationWrapper);
+                        
+                        // Update not selected skills and education fields to empty 
+                        resetUnSelectedSkillsAndEducationFields(SkillsEducationWrapper,position);
+                        
+                        position.Selected_Skills_Count__c = countSkills(SkillsEducationWrapper);
+                        position.Selected_Educations_Count__c = countEducations(SkillsEducationWrapper);
+                        
+                        update position;
+                        pg = System.Page.SkillsEducationPartnerPage2;
+                        pg.getParameters().put('PosId',positionId);
+                        pg.getParameters().put('RecordType',RecordType);
+                        pg.getParameters().put('Step','3');
+                        pg.setRedirect(false);
+                        return pg;
+                    }
+                }catch(Exception objEx){
+                    ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, objEx.getMessage()));
+                    return null;
+                }
+            }else{
+                Error.LogError(Label.Partner_Portal_Position_Not_Found_Message);
+                return null;
+            }
+        }else{
+            Error.LogError(Label.Partner_Portal_Position_Not_Found_Message);
+            return null;
+        }
+       return null;
+    }
+    
+    // This method is called on to save and move next step from second page of Skills and Education
+    public Pagereference saveSkillsEducationPartnerAndMoveNextPage2(){
+        Pagereference pg;
+        positionId = ApexPages.CurrentPage().getParameters().get('PosId');
+        if(positionId != null && positionId !=''){
+            if(SCA_Utility.validateId(positionId)){
+                try{
+                        update position;
+                        pg = System.Page.work_location;
+                        pg.getParameters().put('PosId',positionId);
+                        pg.getParameters().put('RecordType',RecordType);
+                        pg.getParameters().put('Step','4');
+                        pg.setRedirect(true);
+                        return pg;
+                    }catch(Exception objEx){
+                        ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, objEx.getMessage()));
+                        return null;
+                    }
+            }else{
+                Error.LogError(Label.Partner_Portal_Position_Not_Found_Message); 
+                return null;
+            }
+        }else{
+            Error.LogError(Label.Partner_Portal_Position_Not_Found_Message); 
+            return null;
+        }
+    }
+    
+    // This methods is called on to display error message at the top if Position status is Draft
+    public void displayMsg()
+    {
+        PositionID = System.currentPagereference().getParameters().get('PosID');
+        if(SCA_Utility.checkStatus(PositionID)== true)
+            bErrorMsg=true;
+        else   
+        bErrorMsg=false;    
+    }
+    
+    //Method to save selected skills SelectedSkillsAndEducation custom field in Position__c
+    public String saveSelectedSkillsAndEducationInLongTextArea(SkillsEducationWrapper objSkillsEducationWrapper)
+    {
+        String skills = '';
+       
+        if(objSkillsEducationWrapper.isElectrician == true)
+            skills += 'Electrician__c:';
+            if(objSkillsEducationWrapper.isEcology == true)
+            skills += 'Ecology__c:';
+        if(objSkillsEducationWrapper.isPlumbing == true)
+            skills += 'Plumbing__c:';
+       // if(objSkillsEducationWrapper.isMechanics == true)
+          //  skills += 'Mechanics__c:';
+        if(objSkillsEducationWrapper.isCarpentry == true)
+            skills += 'Carpentry__c:';
+        if(objSkillsEducationWrapper.isConstruction == true)
+            skills += 'Construction__c:';
+        if(objSkillsEducationWrapper.isFacilitiesManagement == true)
+            skills += 'Facilities_Management__c:';
+        if(objSkillsEducationWrapper.isWasteManagement == true)
+            skills += 'Waste_Management__c:';
+        if(objSkillsEducationWrapper.isLandscaping == true)
+            skills += 'Landscaping__c:';
+        if(objSkillsEducationWrapper.isCivilEngineering == true)
+            skills += 'Civil_Engineering__c:';
+        //if(objSkillsEducationWrapper.isEngineering == true)
+          //  skills += 'Engineering__c:';
+        
+        // Tools and Equipment
+        if(objSkillsEducationWrapper.isChainSawSkills == true)
+            skills += 'Chain_Saw_Skills__c:';
+        if(objSkillsEducationWrapper.isHandTools == true)
+            skills += 'Hand_Tools__c:';
+        if(objSkillsEducationWrapper.isHeavyEquipment == true)
+            skills += 'Heavy_Equipment__c:';
+        if(objSkillsEducationWrapper.isShotgunUse == true)
+            skills += 'Shotgun_Use__c:';
+        
+        // Outdoor Skills
+        if(objSkillsEducationWrapper.isBackpacking == true)
+            skills += 'Backpacking__c:';
+        //if(objSkillsEducationWrapper.isBackCountryPatrol == true)
+           // skills += 'Backcountry_Patrol__c:';
+        if(objSkillsEducationWrapper.isCamping == true)
+            skills += 'Camping__c:';
+        if(objSkillsEducationWrapper.isBoating == true)
+            skills += 'Boating__c:';
+        if(objSkillsEducationWrapper.isSwimming == true)
+            skills += 'Swimming__c:';
+        //if(objSkillsEducationWrapper.isScubaDiving == true)
+        //  skills += ':';
+        if(objSkillsEducationWrapper.isFarming == true)
+            skills += 'Farming__c:';
+        if(objSkillsEducationWrapper.isWhiteWaterSkills == true)
+            skills += 'White_Water_Skills__c:';
+        if(objSkillsEducationWrapper.isRockClimbing == true)
+            skills += 'Rock_Climbing__c:';
+        if(objSkillsEducationWrapper.isTrailMaintenance == true)
+            skills += 'Trail_Maintenance__c:';
+        if(objSkillsEducationWrapper.isHunting == true)
+            skills += 'Hunting__c:';
+        if(objSkillsEducationWrapper.isOrienteeringCompassSkills == true)
+            skills += 'Orienteering_compass_skills__c:';
+        if(objSkillsEducationWrapper.isCaving == true)
+            skills += 'Caving__c:';
+        if(objSkillsEducationWrapper.isHorsebackRiding == true)
+            skills += 'Horseback_Riding__c:';
+        
+        // Working with the Public  
+        if(objSkillsEducationWrapper.isWorkingwithChildren == true)
+            skills += 'Working_with_Children__c:';
+        if(objSkillsEducationWrapper.isMoneyHandling == true)
+            skills += 'Money_Handling__c:';
+        if(objSkillsEducationWrapper.isCommunityEngagement == true)
+            skills += 'Community_Engagement__c:';
+        if(objSkillsEducationWrapper.isCustomerService == true)
+            skills += 'Customer_Service__c:';
+        if(objSkillsEducationWrapper.isPublicSpeaking == true)
+            skills += 'Public_Speaking__c:';
+        
+        // Practical Research Skill
+        //SCA-328
+        if(objSkillsEducationWrapper.isDataEntry == true)
+            skills += 'Data_Entry__c:';
+        if(objSkillsEducationWrapper.isFieldResearch == true)
+            skills += 'Field_Research__c:'; 
+        if(objSkillsEducationWrapper.isPlantIdentification == true)
+            skills += 'Plant_Identification__c:';   
+        if(objSkillsEducationWrapper.isBirdIdentification == true)
+            skills += 'BirdIdentification__c:'; 
+        if(objSkillsEducationWrapper.isRadioTelemetry == true)
+            skills += 'Radio_Telemetry__c:';    
+        if(objSkillsEducationWrapper.isWaterQualityTesting== true)
+            skills += 'Water_Quality_Testing__c:';
+            
+        // Earth Science        
+        if(objSkillsEducationWrapper.isGIS_GeographicInformationSystems == true)
+            skills += 'GIS__c:';
+        if(objSkillsEducationWrapper.isGPS_GlobalPositioningSystems == true)
+            skills += 'GPS__c:';
+        if(objSkillsEducationWrapper.isPerformingArts == true)
+            skills += 'Performing_Arts__c:';
+        if(objSkillsEducationWrapper.isLeadershipExpereince == true)
+            skills += 'Leadership_Experience__c:';
+        if(objSkillsEducationWrapper.isVolunteerCoordination == true)
+            skills += 'Volunteer_Coordination__c:';
+        
+        if(objSkillsEducationWrapper.isComputerScience == true)
+            skills += 'Computer_Science__c:';
+        if(objSkillsEducationWrapper.isInformationTechnology == true)
+            skills += 'Information_Technology__c:';
+        if(objSkillsEducationWrapper.isWebDesign == true)
+            skills += 'Web_Site_Design__c:';
+        if(objSkillsEducationWrapper.isGraphicDesign == true)
+            skills += 'Graphic_Design__c:';
+        
+        // Outdoor skills   
+        if(objSkillsEducationWrapper.isAdventureEducation == true)
+            skills += 'Adventure_Education__c:';
+        
+        // Working with the Public
+        if(objSkillsEducationWrapper.isInterpretation == true)
+            skills += 'Interpretation__c:';
+        if(objSkillsEducationWrapper.isEnvironmentalEducation == true)
+            skills += 'Environmental_Education__c:';
+        if(objSkillsEducationWrapper.isEducation == true)
+            skills += 'Education__c:';
+        
+        // Practical Research skills    
+        if(objSkillsEducationWrapper.isLabResearch == true)
+            skills += 'Lab_Research__c:';
+        if(objSkillsEducationWrapper.isFireScience == true)
+            skills += 'Fire_Science__c:';
+        if(objSkillsEducationWrapper.isMathematics == true)
+            skills += 'Mathematics__c:';
+        if(objSkillsEducationWrapper.isStatistics == true)
+            skills += 'Statistics__c:';
+        if(objSkillsEducationWrapper.isChemistry == true)
+            skills += 'Chemistry__c:';
+            
+        // Biological Sciences - Animal
+        if(objSkillsEducationWrapper.isBiology == true)
+            skills += 'Biology__c:';
+        if(objSkillsEducationWrapper.isAquaculture == true)
+            skills += 'Aquaculture__c:';
+        if(objSkillsEducationWrapper.isOrnithology == true)
+            skills += 'Ornithology__c:';
+        if(objSkillsEducationWrapper.isHerpetology == true)
+            skills += 'Herpetology__c:';
+        if(objSkillsEducationWrapper.isAnimalTaxonomy == true)
+            skills += 'Taxonomy_Animal__c:';
+        if(objSkillsEducationWrapper.isEntomology == true)
+            skills += 'Entomology__c:';
+        if(objSkillsEducationWrapper.isFisheriesScience == true)
+            skills += 'Fisheries_Science__c:';
+        if(objSkillsEducationWrapper.isZoology == true)
+            skills += 'Zoology__c:';
+        if(objSkillsEducationWrapper.isMarineBiology == true)
+            skills += 'Marine_Biology__c:'; 
+        if(objSkillsEducationWrapper.isWildlifeBiology == true)
+            skills += 'Wildlife_Biology__c:';   
+        
+        // Biological Sciences - Plant
+        if(objSkillsEducationWrapper.isBotany == true)
+            skills += 'Botany__c:';
+        if(objSkillsEducationWrapper.isForestry == true)
+            skills += 'Forestry__c:';
+       // if(objSkillsEducationWrapper.isHorticulture == true)
+          //  skills += 'Horticulture__c:';
+        if(objSkillsEducationWrapper.isEcologicalRestoration == true)
+            skills += 'Ecological_Restoration__c:';
+        if(objSkillsEducationWrapper.isLandscapeDesign == true)
+            skills += 'Landscape_Design__c:';
+       // if(objSkillsEducationWrapper.isPlantTaxonomy == true)
+          //  skills += 'Plant_Taxonomy__c:';
+        
+        // Earth Science
+        if(objSkillsEducationWrapper.isPaleontology == true)
+            skills += 'Paleontology__c:';
+        //if(objSkillsEducationWrapper.isArchaeology == true)
+            //skills += 'Archaeology__c:';
+        if(objSkillsEducationWrapper.isGeography == true)
+            skills += 'Geography__c:';
+        if(objSkillsEducationWrapper.isGeology == true)
+            skills += 'Geology__c:';
+        //if(objSkillsEducationWrapper.isHydrology == true)
+           // skills += 'Hydrology__c:';
+       // if(objSkillsEducationWrapper.isSoilScience  == true)
+           // skills += 'Soil_Science__c:';
+        if(objSkillsEducationWrapper.isEcology == true)
+            skills += 'Ecology__c:';
+        if(objSkillsEducationWrapper.isCartography == true)
+            skills += 'Cartography__c:';
+        if(objSkillsEducationWrapper.isAtmosphericScience == true)
+            skills += 'Atmospheric_Science__c:';
+        
+        // Natural Resources
+        if(objSkillsEducationWrapper.isResourceMangement == true)
+            skills += 'Resource_Management__c:';
+       // if(objSkillsEducationWrapper.isRangeManagement == true)
+        //    skills += 'Range_Management__c:';
+        if(objSkillsEducationWrapper.isRecreationManagement == true)
+            skills += 'Recreation_Management__c:';   
+        if(objSkillsEducationWrapper.isUrbanStudies == true)
+            skills += 'Urban_Studies__c:';
+        if(objSkillsEducationWrapper.isLandscapeArchitecture == true)
+            skills += 'Landscape_Architecture__c:';
+        if(objSkillsEducationWrapper.isHistoricPreservation == true)
+            skills += 'Historical_Preservation__c:';
+        if(objSkillsEducationWrapper.isSustainability == true)
+            skills += 'Sustainability__c:';
+        if(objSkillsEducationWrapper.isWildLifeManagement == true)
+            skills += 'Wildlife_Management__c:';    
+        
+        // Cultural Sciences
+        if(objSkillsEducationWrapper.isAnthropology == true)
+            skills += 'Anthropology__c:';
+        if(objSkillsEducationWrapper.isNativeAmericanStudies == true)
+            skills += 'Native_American_Studies__c:';
+        if(objSkillsEducationWrapper.isNaturalHistory == true)
+            skills += 'Natural_History__c:';
+       // if(objSkillsEducationWrapper.isAmericanHistory == true)
+         //   skills += 'American_History__c:';
+        if(objSkillsEducationWrapper.isHistory == true)
+            skills += 'History__c:';
+        
+        // Creative skills/Fine Arts
+          if(objSkillsEducationWrapper.isPhotography == true)
+            skills += 'Photography__c:';
+          if(objSkillsEducationWrapper.isWritingPublishing == true)
+            skills += 'Publishing__c:';
+      
+        // Business skills
+        if(objSkillsEducationWrapper.isEconomics == true)
+            skills += 'Economics__c:';
+        if(objSkillsEducationWrapper.isMarketing == true)
+            skills += 'Marketing__c:';
+        if(objSkillsEducationWrapper.isCommunications == true)
+            skills += 'Communications__c:';
+        
+        // Public Safety/Health
+        if(objSkillsEducationWrapper.isRiskManagement == true)
+            skills += 'Risk_Management2__c:';
+        if(objSkillsEducationWrapper.isPublicSafetyHealth == true)
+            skills += 'Public_Safety_Health__c:';
+    
+        system.debug('skills445==>'+skills);
+        return skills;
+    }
+    
+    public void retriveSelectedSkillsAndEducation(SkillsEducationWrapper objSkillsEducationWrapper)
+    {
+        String skillsAndEdu;
+        list<String> skillsAndEduList = new list<String>();
+        set<String> skillsAndEduSet = new set<String>(); 
+        
+        //skillsAndEdu = position.SelectedSkillsAndEducation__c;
+        /*
+        if(skillsAndEdu != null)
+            skillsAndEduList = skillsAndEdu.split(':');
+        for(String skills : skillsAndEduList)
+        {
+            skillsAndEduSet.add(skills);
+        }*/
+        
+        if(position.SelectedSkillsAndEducation__c == null){
+            SkillsAndEdu = populateSelectedSkillsAndEducationInLongTextArea(position);
+        }else if(position.SelectedSkillsAndEducation__c != null){
+            SkillsAndEdu = position.SelectedSkillsAndEducation__c;
+        }
+        
+        System.debug('SkillsAndEdu====>'+SkillsAndEdu);
+        
+        skillsAndEduList = skillsAndEdu.split(':');
+        
+        System.debug('skillsAndEduList====>'+skillsAndEduList);
+        
+        for(String skills : skillsAndEduList)
+        {
+            skillsAndEduSet.add(skills);
+        }
+                
+        if(skillsAndEduSet.contains('Electrician__c'))
+            objSkillsEducationWrapper.isElectrician = true;
+        
+        if(skillsAndEduSet.contains('Plumbing__c'))
+            objSkillsEducationWrapper.isPlumbing = true;
+    
+        //if(skillsAndEduSet.contains('Mechanics__c'))
+         //   objSkillsEducationWrapper.isMechanics = true;
+        
+        if(skillsAndEduSet.contains('Carpentry__c'))
+            objSkillsEducationWrapper.isCarpentry = true;
+    
+        if(skillsAndEduSet.contains('Construction__c'))
+            objSkillsEducationWrapper.isConstruction = true;
+
+        if(skillsAndEduSet.contains('Facilities_Management__c'))
+            objSkillsEducationWrapper.isFacilitiesManagement = true;
+        
+        if(skillsAndEduSet.contains('Waste_Management__c'))
+            objSkillsEducationWrapper.isWasteManagement = true;
+        
+        if(skillsAndEduSet.contains('Landscaping__c'))
+            objSkillsEducationWrapper.isLandscaping = true;
+            
+        if(skillsAndEduSet.contains('Civil_Engineering__c'))
+            objSkillsEducationWrapper.isCivilEngineering = true;
+            
+        //if(skillsAndEduSet.contains('Engineering__c'))
+         //   objSkillsEducationWrapper.isEngineering = true;
+            
+        if(skillsAndEduSet.contains('Chain_Saw_Skills__c'))
+            objSkillsEducationWrapper.isChainSawSkills = true;
+            
+        if(skillsAndEduSet.contains('Hand_Tools__c'))
+            objSkillsEducationWrapper.isHandTools = true;
+            
+        if(skillsAndEduSet.contains('Heavy_Equipment__c'))
+            objSkillsEducationWrapper.isHeavyEquipment = true;
+        
+        if(skillsAndEduSet.contains('Shotgun_Use__c'))
+            objSkillsEducationWrapper.isShotgunUse = true;
+    
+        if(skillsAndEduSet.contains('Backpacking__c'))
+            objSkillsEducationWrapper.isBackpacking = true;
+        
+        //if(skillsAndEduSet.contains('Backcountry_Patrol__c'))
+         //   objSkillsEducationWrapper.isBackCountryPatrol = true;
+    
+        if(skillsAndEduSet.contains('Camping__c'))
+            objSkillsEducationWrapper.isCamping = true;
+        
+        if(skillsAndEduSet.contains('Boating__c'))
+            objSkillsEducationWrapper.isBoating = true;
+    
+        if(skillsAndEduSet.contains('Swimming__c'))
+            objSkillsEducationWrapper.isSwimming = true;
+        
+        if(skillsAndEduSet.contains('Farming__c'))
+            objSkillsEducationWrapper.isFarming = true;
+    
+        if(skillsAndEduSet.contains('White_Water_Skills__c'))
+            objSkillsEducationWrapper.isWhiteWaterSkills = true;
+        
+        if(skillsAndEduSet.contains('Rock_Climbing__c'))
+            objSkillsEducationWrapper.isRockClimbing = true;
+    
+        if(skillsAndEduSet.contains('Trail_Maintenance__c'))
+            objSkillsEducationWrapper.isTrailMaintenance = true;
+        
+        if(skillsAndEduSet.contains('Hunting__c'))
+            objSkillsEducationWrapper.isHunting = true;
+        
+        if(skillsAndEduSet.contains('Orienteering_compass_skills__c'))
+            objSkillsEducationWrapper.isOrienteeringCompassSkills = true;
+        
+        if(skillsAndEduSet.contains('Caving__c'))
+            objSkillsEducationWrapper.isCaving = true;
+    
+        if(skillsAndEduSet.contains('Horseback_Riding__c'))
+            objSkillsEducationWrapper.isHorsebackRiding = true;
+        
+        if(skillsAndEduSet.contains('Working_with_Children__c'))
+            objSkillsEducationWrapper.isWorkingwithChildren = true;
+        
+        if(skillsAndEduSet.contains('Money_Handling__c'))
+            objSkillsEducationWrapper.isMoneyHandling = true;
+    
+        if(skillsAndEduSet.contains('Community_Engagement__c'))
+            objSkillsEducationWrapper.isCommunityEngagement = true;
+        
+        if(skillsAndEduSet.contains('Customer_Service__c'))
+            objSkillsEducationWrapper.isCustomerService = true;
+    
+        if(skillsAndEduSet.contains('Public_Speaking__c'))
+            objSkillsEducationWrapper.isPublicSpeaking = true;
+        
+        if(skillsAndEduSet.contains('Data_Entry__c'))
+            objSkillsEducationWrapper.isDataEntry = true;
+        
+        if(skillsAndEduSet.contains('Field_Research__c'))
+            objSkillsEducationWrapper.isFieldResearch = true;
+        
+        if(skillsAndEduSet.contains('Plant_Identification__c'))
+            objSkillsEducationWrapper.isPlantIdentification = true;
+    
+        if(skillsAndEduSet.contains('BirdIdentification__c'))
+            objSkillsEducationWrapper.isBirdIdentification = true;
+        
+        if(skillsAndEduSet.contains('Radio_Telemetry__c'))
+            objSkillsEducationWrapper.isRadioTelemetry = true;
+    
+        if(skillsAndEduSet.contains('Water_Quality_Testing__c'))
+            objSkillsEducationWrapper.isWaterQualityTesting = true;
+        
+        if(skillsAndEduSet.contains('GIS__c'))
+            objSkillsEducationWrapper.isGIS_GeographicInformationSystems = true;
+    
+        if(skillsAndEduSet.contains('GPS__c'))
+            objSkillsEducationWrapper.isGPS_GlobalPositioningSystems = true;
+        
+        if(skillsAndEduSet.contains('Performing_Arts__c'))
+            objSkillsEducationWrapper.isPerformingArts = true;
+    
+        if(skillsAndEduSet.contains('Leadership_Experience__c'))
+            objSkillsEducationWrapper.isLeadershipExpereince = true;
+    
+        if(skillsAndEduSet.contains('Volunteer_Coordination__c'))
+            objSkillsEducationWrapper.isVolunteerCoordination = true;
+            
+        //Educations
+        if(skillsAndEduSet.contains('Computer_Science__c'))
+            objSkillsEducationWrapper.isComputerScience = true;
+        
+        if(skillsAndEduSet.contains('Information_Technology__c'))
+            objSkillsEducationWrapper.isInformationTechnology = true;
+        
+        if(skillsAndEduSet.contains('Web_Site_Design__c'))
+            objSkillsEducationWrapper.isWebDesign = true;
+        
+        if(skillsAndEduSet.contains('Graphic_Design__c'))
+            objSkillsEducationWrapper.isGraphicDesign = true;
+        
+        if(skillsAndEduSet.contains('Adventure_Education__c'))
+            objSkillsEducationWrapper.isAdventureEducation = true;
+        
+        if(skillsAndEduSet.contains('Interpretation__c'))
+            objSkillsEducationWrapper.isInterpretation = true;
+        
+        if(skillsAndEduSet.contains('Environmental_Education__c'))
+            objSkillsEducationWrapper.isEnvironmentalEducation = true;
+    
+        if(skillsAndEduSet.contains('Education__c'))
+            objSkillsEducationWrapper.isEducation = true;
+    
+        if(skillsAndEduSet.contains('Lab_Research__c'))
+            objSkillsEducationWrapper.isLabResearch = true;
+    
+        if(skillsAndEduSet.contains('Fire_Science__c'))
+            objSkillsEducationWrapper.isFireScience = true;
+    
+        if(skillsAndEduSet.contains('Mathematics__c'))
+            objSkillsEducationWrapper.isMathematics = true;
+    
+        if(skillsAndEduSet.contains('Statistics__c'))
+            objSkillsEducationWrapper.isStatistics = true;
+    
+        if(skillsAndEduSet.contains('Chemistry__c'))
+            objSkillsEducationWrapper.isChemistry = true;
+    
+        if(skillsAndEduSet.contains('Biology__c'))
+            objSkillsEducationWrapper.isBiology = true;
+    
+        if(skillsAndEduSet.contains('Aquaculture__c'))
+            objSkillsEducationWrapper.isAquaculture = true;
+    
+        if(skillsAndEduSet.contains('Ornithology__c'))
+            objSkillsEducationWrapper.isOrnithology = true;
+    
+        if(skillsAndEduSet.contains('Herpetology__c'))
+            objSkillsEducationWrapper.isHerpetology = true;
+    
+        if(skillsAndEduSet.contains('Taxonomy_Animal__c'))
+            objSkillsEducationWrapper.isAnimalTaxonomy = true;
+    
+        if(skillsAndEduSet.contains('Entomology__c'))
+            objSkillsEducationWrapper.isEntomology = true;
+    
+        if(skillsAndEduSet.contains('Fisheries_Science__c'))
+            objSkillsEducationWrapper.isFisheriesScience = true;
+    
+        if(skillsAndEduSet.contains('Zoology__c'))
+            objSkillsEducationWrapper.isZoology = true;
+    
+        if(skillsAndEduSet.contains('Marine_Biology__c'))
+            objSkillsEducationWrapper.isMarineBiology = true;
+    
+        if(skillsAndEduSet.contains('Wildlife_Biology__c'))
+            objSkillsEducationWrapper.isWildlifeBiology = true;
+    
+        if(skillsAndEduSet.contains('Botany__c'))
+            objSkillsEducationWrapper.isBotany = true;
+    
+        if(skillsAndEduSet.contains('Forestry__c'))
+            objSkillsEducationWrapper.isForestry = true;
+    
+       // if(skillsAndEduSet.contains('Horticulture__c'))
+          //  objSkillsEducationWrapper.isHorticulture = true;
+    
+        if(skillsAndEduSet.contains('Ecological_Restoration__c'))
+            objSkillsEducationWrapper.isEcologicalRestoration = true;
+    
+        if(skillsAndEduSet.contains('Landscape_Design__c'))
+            objSkillsEducationWrapper.isLandscapeDesign = true;
+    
+       // if(skillsAndEduSet.contains('Plant_Taxonomy__c'))
+        //    objSkillsEducationWrapper.isPlantTaxonomy = true;
+    
+        if(skillsAndEduSet.contains('Paleontology__c'))
+            objSkillsEducationWrapper.isPaleontology = true;
+    
+        //if(skillsAndEduSet.contains('Archaeology__c'))
+           // objSkillsEducationWrapper.isArchaeology = true;
+    
+        if(skillsAndEduSet.contains('Geography__c'))
+            objSkillsEducationWrapper.isGeography = true;
+    
+        if(skillsAndEduSet.contains('Geology__c'))
+            objSkillsEducationWrapper.isGeology = true;
+    
+        //if(skillsAndEduSet.contains('Hydrology__c'))
+           /// objSkillsEducationWrapper.isHydrology = true;
+            
+       // if(skillsAndEduSet.contains('Soil_Science__c'))
+            //objSkillsEducationWrapper.isSoilScience = true;
+    
+        if(skillsAndEduSet.contains('Ecology__c'))
+            objSkillsEducationWrapper.isEcology = true;
+    
+        if(skillsAndEduSet.contains('Cartography__c'))
+            objSkillsEducationWrapper.isCartography = true;
+    
+        if(skillsAndEduSet.contains('Atmospheric_Science__c'))
+            objSkillsEducationWrapper.isAtmosphericScience = true;
+    
+        if(skillsAndEduSet.contains('Resource_Management__c'))
+            objSkillsEducationWrapper.isResourceMangement = true;
+    
+        //if(skillsAndEduSet.contains('Range_Management__c'))
+         //   objSkillsEducationWrapper.isRangeManagement = true;
+    
+        if(skillsAndEduSet.contains('Recreation_Management__c'))
+            objSkillsEducationWrapper.isRecreationManagement = true;
+    
+        if(skillsAndEduSet.contains('Urban_Studies__c'))
+            objSkillsEducationWrapper.isUrbanStudies = true;
+    
+        if(skillsAndEduSet.contains('Landscape_Architecture__c'))
+            objSkillsEducationWrapper.isLandscapeArchitecture = true;
+    
+        if(skillsAndEduSet.contains('Historical_Preservation__c'))
+            objSkillsEducationWrapper.isHistoricPreservation = true;
+    
+        if(skillsAndEduSet.contains('Sustainability__c'))
+            objSkillsEducationWrapper.isSustainability = true;
+    
+        if(skillsAndEduSet.contains('Wildlife_Management__c'))
+            objSkillsEducationWrapper.isWildLifeManagement = true;
+    
+        if(skillsAndEduSet.contains('Anthropology__c'))
+            objSkillsEducationWrapper.isAnthropology = true;
+    
+        if(skillsAndEduSet.contains('Native_American_Studies__c'))
+            objSkillsEducationWrapper.isNativeAmericanStudies = true;
+    
+        if(skillsAndEduSet.contains('Natural_History__c'))
+            objSkillsEducationWrapper.isNaturalHistory = true;
+    
+        //if(skillsAndEduSet.contains('American_History__c'))
+          //  objSkillsEducationWrapper.isAmericanHistory = true;
+    
+        if(skillsAndEduSet.contains('History__c'))
+            objSkillsEducationWrapper.isHistory = true;
+    
+        if(skillsAndEduSet.contains('Photography__c'))
+            objSkillsEducationWrapper.isPhotography = true;
+    
+        if(skillsAndEduSet.contains('Publishing__c'))
+            objSkillsEducationWrapper.isWritingPublishing = true;
+    
+        if(skillsAndEduSet.contains('Economics__c'))
+            objSkillsEducationWrapper.isEconomics = true;
+    
+        if(skillsAndEduSet.contains('Marketing__c'))
+            objSkillsEducationWrapper.isMarketing = true;
+    
+        if(skillsAndEduSet.contains('Communications__c'))
+            objSkillsEducationWrapper.isCommunications = true;
+    
+        if(skillsAndEduSet.contains('Risk_Management2__c'))
+            objSkillsEducationWrapper.isRiskManagement = true;
+        
+        if(skillsAndEduSet.contains('Public_Safety_Health__c'))
+            objSkillsEducationWrapper.isPublicSafetyHealth = true;
+    }
+    
+        //Method to populate selected SkillsAndEducation in Position__c
+   public String populateSelectedSkillsAndEducationInLongTextArea(Position__c position)
+    {
+        String skills = '';
+    
+        if(position.Atmospheric_Science__c != null)
+            skills += 'Atmospheric_Science__c :';
+        if(position.Biology__c != null)
+            skills += 'Biology__c:';
+        if(position.Botany__c  != null)
+            skills += 'Botany__c :';
+        if(position.Communications__c != null)
+            skills += 'Communications__c:';
+        if(position.Geology__c != null)
+            skills += 'Geology__c:';
+        if(position.Ecology__c != null)
+            skills += 'Ecology__c:';
+        if(position.Education__c != null)
+            skills += 'Education__c:';
+        if(position.Forestry__c != null)
+            skills += 'Forestry__c:';
+        if(position.History__c != null)
+            skills += 'History__c:';
+        if(position.Mathematics__c != null)
+            skills += 'Mathematics__c:';
+        
+        // Tools and Equipment
+        if(position.Resource_Management__c != null)
+            skills += 'Resource_Management__c:';
+        if(position.Anthropology__c != null)
+            skills += 'Anthropology__c:';
+        if(position.Atmospheric_Science__c != null)
+            skills += 'Atmospheric_Science__c:';
+        if(position.Heavy_Equipment__c != null)
+            skills += 'Heavy_Equipment__c:';
+        
+            // Outdoor Skills
+        if(position.Backpacking__c != null)
+            skills += 'Backpacking__c:';
+        if(position.BirdIdentification__c != null)
+            skills += 'BirdIdentification__c:';
+        if(position.Boating__c != null)
+            skills += 'Boating__c:';
+        if(position.Camping__c != null)
+            skills += 'Camping__c:';
+        if(position.Computer_Science__c  != null)
+            skills += 'Computer_Science__c :';
+        if(position.Carpentry__c  != null)
+            skills += 'Carpentry__c :';
+        if(position.Chain_Saw_Skills__c  != null)
+            skills += 'Chain_Saw_Skills__c:';
+        if(position.Community_Engagement__c != null)
+            skills += 'Customer_Service__c:';
+        if(position.Statistics__c != null)
+            skills += 'Statistics__c:';
+        if(position.Data_Entry__c != null)
+            skills += 'Data_Entry__c:';
+        if(position.Field_Research__c != null)
+            skills += 'Field_Research__c:';
+        if(position.Hunting__c != null)
+            skills += 'Hunting__c:';
+        if(position.GIS__c != null)
+            skills += 'GIS__c:';
+        
+        // Working with the Public  
+        if(position.GPS__c != null)
+            skills += 'GPS__c:';
+        if(position.Hand_Tools__c != null)
+            skills += 'Hand_Tools__c:';
+        if(position.Leadership_Experience__c != null)
+            skills += 'Leadership_Experience__c:';
+        if(position.Money_Handling__c != null)
+            skills += 'Money_Handling__c:';
+        if(position.Orienteering_compass_skills__c != null)
+        skills += 'Orienteering_compass_skills__c:';
+        
+        // Practical Research Skill
+        
+        if(position.Plant_Identification__c != null)
+            skills += 'Plant_Identification__c:';
+        if(position.Photography__c != null)
+            skills += 'Photography__c:'; 
+        if(position.Public_Speaking__c != null)
+            skills += 'Public_Speaking__c:';   
+        if(position.Information_Technology__c != null)
+            skills += 'Information_Technology__c:'; 
+        if(position.Swimming__c != null)
+            skills += 'Swimming__c:';    
+        if(position.Trail_Maintenance__c != null)
+            skills += 'Trail_Maintenance__c:';
+        
+        // Earth Science        
+        if(position.Volunteer_Coordination__c != null)
+            skills += 'Volunteer_Coordination__c:';
+        if(position.Web_Site_Design__c != null)
+            skills += 'Web_Site_Design__c:';
+        if(position.Horseback_Riding__c != null)
+            skills += 'Horseback_Riding__c:';
+        if(position.Working_with_Children__c != null)
+            skills += 'Working_with_Children__c:';
+        if(position.Publishing__c != null)
+            skills += 'Publishing__c:';
+        
+        System.debug('Skills===>'+skills);
+        return skills;
+        
+    }
+        
+    // Method called on to check selected Skills
+    public Integer countSkills(SkillsEducationWrapper objSkillsEducationWrapper){
+        Integer i =0;
+       if(objSkillsEducationWrapper.isBackpacking == true)
+            i++;
+    if(objSkillsEducationWrapper.isBirdIdentification == true)
+            i++;    
+    if(objSkillsEducationWrapper.isBoating == true)
+            i++;
+    if(objSkillsEducationWrapper.isCamping == true)
+            i++;
+    if(objSkillsEducationWrapper.isComputerScience == true)
+            i++;
+    if(objSkillsEducationWrapper.isConstruction == true)
+            i++;
+        if(objSkillsEducationWrapper.isChainSawSkills == true)
+            i++;
+    if(objSkillsEducationWrapper.isCommunityEngagement == true)
+            i++;
+    if(objSkillsEducationWrapper.isCustomerService == true)
+            i++;
+    if(objSkillsEducationWrapper.isDataEntry == true)
+            i++;
+    if(objSkillsEducationWrapper.isFieldResearch == true)
+            i++; 
+    if(objSkillsEducationWrapper.isGIS_GeographicInformationSystems == true)
+            i++;
+        if(objSkillsEducationWrapper.isGPS_GlobalPositioningSystems == true)
+            i++;
+    if(objSkillsEducationWrapper.isHandTools == true)
+            i++;
+    if(objSkillsEducationWrapper.isLeadershipExpereince == true)
+            i++;
+    if(objSkillsEducationWrapper.isOrienteeringCompassSkills == true)
+            i++;
+    if(objSkillsEducationWrapper.isPlantIdentification == true)
+            i++;   
+    if(objSkillsEducationWrapper.isPhotography == true)
+            i++;
+    if(objSkillsEducationWrapper.isPublicSpeaking == true)
+            i++;
+    if(objSkillsEducationWrapper.isSwimming == true)
+            i++;
+    if(objSkillsEducationWrapper.isTrailMaintenance == true)
+            i++;
+    if(objSkillsEducationWrapper.isWebDesign == true)
+            i++;
+    if(objSkillsEducationWrapper.isWorkingwithChildren == true)
+            i++;
+    if(objSkillsEducationWrapper.isWritingPublishing == true)
+            i++;
+        
+    if(objSkillsEducationWrapper.isStatistics == true)
+            i++;
+    if(objSkillsEducationWrapper.isHunting == true)
+            i++;
+    if(objSkillsEducationWrapper.isMoneyHandling == true)
+            i++;  
+    if(objSkillsEducationWrapper.isInformationTechnology == true)
+            i++;
+     if(objSkillsEducationWrapper.isVolunteerCoordination == true)
+            i++;
+      if(objSkillsEducationWrapper.isHorsebackRiding == true)
+            i++;
+      if(objSkillsEducationWrapper.isOrienteeringCompassSkills == true)
+            i++;            
+            
+        return i;   
+    }
+    
+    
+    
+    
+    
+    
+    // Method called on to check selected Educations 
+    public Integer countEducations(SkillsEducationWrapper objSkillsEducationWrapper){
+        Integer i = 0;
+        if(objSkillsEducationWrapper.isAtmosphericScience == true)
+            i++;
+        if(objSkillsEducationWrapper.isBiology == true)
+            i++;
+        if(objSkillsEducationWrapper.isBotany == true)
+            i++;
+        if(objSkillsEducationWrapper.isCommunications == true)
+            i++;
+        if(objSkillsEducationWrapper.isGeology == true)
+            i++;
+        if(objSkillsEducationWrapper.isLandscapeDesign == true)
+            i++;
+        if(objSkillsEducationWrapper.isEducation == true)
+            i++;
+        if(objSkillsEducationWrapper.isForestry == true)
+            i++;
+        
+        if(objSkillsEducationWrapper.isHistory == true)
+            i++;
+        if(objSkillsEducationWrapper.isMathematics == true)
+            i++;
+        if(objSkillsEducationWrapper.isRecreationManagement == true)
+            i++;
+        if(objSkillsEducationWrapper.isResourceMangement == true)
+            i++;
+        if(objSkillsEducationWrapper.isAnthropology == true)
+            i++;
+        
+        return i;
+    }
+    
+    // This method is called on to reset unselected Skills and Education Picklists and their description fields
+    public void resetUnSelectedSkillsAndEducationFields(SkillsEducationWrapper objSkillsEducationWrapper, Position__c position){
+        // Skills
+        // Trade/Vocational
+        if(objSkillsEducationWrapper.isElectrician == false)
+            position.Electrician__c = '';
+        if(objSkillsEducationWrapper.isPlumbing == false)
+            position.Plumbing__c = '';  
+        //if(objSkillsEducationWrapper.isMechanics == false)
+          //  position.Mechanics__c = '';
+        if(objSkillsEducationWrapper.isCarpentry == false)
+            position.Carpentry__c = '';
+        if(objSkillsEducationWrapper.isConstruction == false)
+            position.Construction__c = '';
+        if(objSkillsEducationWrapper.isFacilitiesManagement == false)
+            position.Facilities_Management__c = '';
+        if(objSkillsEducationWrapper.isWasteManagement == false)
+            position.Waste_Management__c = '';
+        if(objSkillsEducationWrapper.isLandscaping == false)
+            position.Landscaping__c = '';
+        if(objSkillsEducationWrapper.isCivilEngineering == false)
+            position.Civil_Engineering__c = '';
+        //if(objSkillsEducationWrapper.isEngineering == false)
+         //   position.Engineering__c = '';
+        
+        // Tools and Equipment
+        if(objSkillsEducationWrapper.isChainSawSkills == false)
+            position.Chain_Saw_Skills__c = '';
+        if(objSkillsEducationWrapper.isHandTools == false)
+            position.Hand_Tools__c = '';
+        if(objSkillsEducationWrapper.isHeavyEquipment == false)
+            position.Heavy_Equipment__c = '';
+        if(objSkillsEducationWrapper.isShotgunUse == false)
+            position.Shotgun_Use__c = '';
+        
+        // Outdoor Skills
+        if(objSkillsEducationWrapper.isBackpacking == false)
+            position.Backpacking__c = '';
+       // if(objSkillsEducationWrapper.isBackCountryPatrol == false)
+          //  position.Backcountry_Patrol__c = '';
+        if(objSkillsEducationWrapper.isCamping == false)
+            position.Camping__c = '';
+        if(objSkillsEducationWrapper.isBoating == false)
+            position.Boating__c = '';
+        if(objSkillsEducationWrapper.isSwimming == false)
+            position.Swimming__c = '';
+        if(objSkillsEducationWrapper.isFarming == false)
+            position.Farming__c = '';
+        if(objSkillsEducationWrapper.isWhiteWaterSkills == false)
+            position.White_Water_Skills__c = '';
+        if(objSkillsEducationWrapper.isRockClimbing == false)
+            position.Rock_Climbing__c = '';
+        if(objSkillsEducationWrapper.isTrailMaintenance == false)
+            position.Trail_Maintenance__c = '';
+        if(objSkillsEducationWrapper.isHunting == false)
+            position.Hunting__c = '';
+        if(objSkillsEducationWrapper.isOrienteeringCompassSkills == false)
+            position.Orienteering_compass_skills__c = '';
+        if(objSkillsEducationWrapper.isCaving == false)
+            position.Caving__c = '';
+        if(objSkillsEducationWrapper.isHorsebackRiding == false)
+            position.Horseback_Riding__c = '';
+        
+        // Working with the Public  
+        if(objSkillsEducationWrapper.isWorkingwithChildren == false)
+            position.Working_with_Children__c = '';
+        if(objSkillsEducationWrapper.isMoneyHandling == false)
+            position.Money_Handling__c = '';
+        if(objSkillsEducationWrapper.isCommunityEngagement == false)
+            position.Community_Engagement__c = '';
+        if(objSkillsEducationWrapper.isCustomerService == false)
+            position.Customer_Service__c = '';
+        if(objSkillsEducationWrapper.isPublicSpeaking == false)
+            position.Public_Speaking__c = '';
+        
+        // Practical Research Skill
+        if(objSkillsEducationWrapper.isDataEntry == false)
+            position.Data_Entry__c = '';
+        if(objSkillsEducationWrapper.isFieldResearch == false)
+            position.Field_Research__c = '';    
+        if(objSkillsEducationWrapper.isPlantIdentification == false)
+            position.Plant_Identification__c = '';
+        if(objSkillsEducationWrapper.isBirdIdentification == false)
+            position.BirdIdentification__c = '';
+        if(objSkillsEducationWrapper.isRadioTelemetry == false)
+            position.Radio_Telemetry__c = '';
+        if(objSkillsEducationWrapper.isWaterQualityTesting== false)
+            position.Water_Quality_Testing__c = '';
+            
+        // Earth Science        
+        if(objSkillsEducationWrapper.isGIS_GeographicInformationSystems == false)
+            position.GIS__c = '';
+        if(objSkillsEducationWrapper.isGPS_GlobalPositioningSystems == false)
+            position.GPS__c = '';
+        
+        // Creative Skills/Fine Arts
+        if(objSkillsEducationWrapper.isPerformingArts == false)
+            position.Performing_Arts__c = '';
+        
+        // Project Leadership Skills
+        if(objSkillsEducationWrapper.isLeadershipExpereince == false)
+            position.Leadership_Experience__c = '';
+        if(objSkillsEducationWrapper.isVolunteerCoordination == false)
+            position.Volunteer_Coordination__c = '';
+            
+        // Educations
+        // Computer
+        if(objSkillsEducationWrapper.isComputerScience == false)
+            position.Computer_Science__c = '';
+        if(objSkillsEducationWrapper.isInformationTechnology == false)
+            position.Information_Technology__c = '';
+        if(objSkillsEducationWrapper.isWebDesign == false)
+            position.Web_Site_Design__c = '';
+        if(objSkillsEducationWrapper.isGraphicDesign == false)
+            position.Graphic_Design__c = '';
+        
+        // Outdoor Skills   
+        if(objSkillsEducationWrapper.isAdventureEducation == false)
+            position.Adventure_Education__c = '';
+        
+        // Working with the Public
+        if(objSkillsEducationWrapper.isInterpretation == false)
+            position.Interpretation__c = '';
+        if(objSkillsEducationWrapper.isEnvironmentalEducation == false)
+            position.Environmental_Education__c = '';
+        if(objSkillsEducationWrapper.isEducation == false)
+            position.Education__c = '';
+        
+        // Practical Research Skills    
+        if(objSkillsEducationWrapper.isLabResearch == false)
+            position.Lab_Research__c = '';
+        if(objSkillsEducationWrapper.isFireScience == false)
+            position.Fire_Science__c = '';
+        if(objSkillsEducationWrapper.isMathematics == false)
+            position.Mathematics__c = '';
+        if(objSkillsEducationWrapper.isStatistics == false)
+            position.Statistics__c = '';
+        if(objSkillsEducationWrapper.isChemistry == false)
+            position.Chemistry__c = '';
+            
+        // Biological Sciences - Animal
+        if(objSkillsEducationWrapper.isBiology == false)
+            position.Biology__c = '';
+        if(objSkillsEducationWrapper.isAquaculture == false)
+            position.Aquaculture__c = '';
+        if(objSkillsEducationWrapper.isOrnithology == false)
+            position.Ornithology__c = '';
+        if(objSkillsEducationWrapper.isHerpetology == false)
+            position.Herpetology__c = '';
+        if(objSkillsEducationWrapper.isAnimalTaxonomy == false)
+            position.Taxonomy_Animal__c = '';
+        if(objSkillsEducationWrapper.isEntomology == false)
+            position.Entomology__c = '';
+        if(objSkillsEducationWrapper.isFisheriesScience == false)
+            position.Fisheries_Science__c = '';
+        if(objSkillsEducationWrapper.isZoology == false)
+            position.Zoology__c = '';
+        if(objSkillsEducationWrapper.isMarineBiology == false)
+            position.Marine_Biology__c = '';
+        if(objSkillsEducationWrapper.isWildlifeBiology == false)
+            position.Wildlife_Biology__c = '';
+        
+        // Biological Sciences - Plant
+        if(objSkillsEducationWrapper.isBotany == false)
+            position.Botany__c = '';
+        if(objSkillsEducationWrapper.isForestry == false)
+            position.Forestry__c = '';
+        //if(objSkillsEducationWrapper.isHorticulture == false)
+          //  position.Horticulture__c = '';
+        if(objSkillsEducationWrapper.isEcologicalRestoration == false)
+            position.Ecological_Restoration__c = '';
+        if(objSkillsEducationWrapper.isLandscapeDesign == false)
+            position.Landscape_Design__c = '';
+       // if(objSkillsEducationWrapper.isPlantTaxonomy == false)
+        //    position.Plant_Taxonomy__c = '';
+        
+        // Earth Science
+        if(objSkillsEducationWrapper.isPaleontology == false)
+            position.Paleontology__c = '';
+        //if(objSkillsEducationWrapper.isArchaeology == false)
+           // position.Archaeology__c = '';
+        if(objSkillsEducationWrapper.isGeography == false)
+            position.Geography__c = '';
+        if(objSkillsEducationWrapper.isGeology == false)
+            position.Geology__c = '';
+        //if(objSkillsEducationWrapper.isHydrology == false)
+          //  position.Hydrology__c = '';
+        //if(objSkillsEducationWrapper.isSoilScience  == false)
+            //position.Soil_Science__c = '';
+        if(objSkillsEducationWrapper.isEcology == false)
+            position.Ecology__c = '';
+        if(objSkillsEducationWrapper.isCartography == false)
+            position.Cartography__c = '';
+        if(objSkillsEducationWrapper.isAtmosphericScience == false)
+            position.Atmospheric_Science__c = '';
+        
+        // Natural Resources
+        if(objSkillsEducationWrapper.isResourceMangement == false)
+            position.Resource_Management__c = '';
+        //if(objSkillsEducationWrapper.isRangeManagement == false)
+          //  position.Range_Management__c = '';
+        if(objSkillsEducationWrapper.isRecreationManagement == false)
+             position.Recreation_Management__c = '';
+        if(objSkillsEducationWrapper.isUrbanStudies == false)
+            position.Urban_Studies__c = '';
+        if(objSkillsEducationWrapper.isLandscapeArchitecture == false)
+            position.Landscape_Architecture__c = '';
+        if(objSkillsEducationWrapper.isHistoricPreservation == false)
+            position.Historical_Preservation__c = '';
+        if(objSkillsEducationWrapper.isSustainability == false)
+            position.Sustainability__c = '';
+        if(objSkillsEducationWrapper.isWildLifeManagement == false)
+            position.Wildlife_Management__c = '';
+        
+        // Cultural Sciences
+        if(objSkillsEducationWrapper.isAnthropology == false)
+            position.Anthropology__c = '';
+        if(objSkillsEducationWrapper.isNativeAmericanStudies == false)
+            position.Native_American_Studies__c = '';
+        if(objSkillsEducationWrapper.isNaturalHistory == false)
+            position.Natural_History__c = '';
+       // if(objSkillsEducationWrapper.isAmericanHistory == false)
+           // position.American_History__c = '';
+        if(objSkillsEducationWrapper.isHistory == false)
+            position.History__c = ''; 
+        
+        // Creative Skills/Fine Arts
+        if(objSkillsEducationWrapper.isPhotography == false)
+            position.Photography__c = '';
+        if(objSkillsEducationWrapper.isWritingPublishing == false)
+            position.Publishing__c = '';
+      
+        // Business Skills
+        if(objSkillsEducationWrapper.isEconomics == false)
+            position.Economics__c = '';
+        if(objSkillsEducationWrapper.isMarketing == false)
+            position.Marketing__c = '';
+        if(objSkillsEducationWrapper.isCommunications == false)
+            position.Communications__c = '';
+        
+        // Public Safety/Health
+        if(objSkillsEducationWrapper.isRiskManagement == false)
+            position.Risk_Management2__c = '';
+        if(objSkillsEducationWrapper.isPublicSafetyHealth == false)
+            position.Public_Safety_Health__c = '';
+    }
+    
+    // Wrapper class to display checkboxes along with their skills and education fields
+    public class SkillsEducationWrapper
+    {
+        //Trade/Vocational
+        public boolean isElectrician{get;set;}
+        public boolean isPlumbing{get;set;}
+        public boolean isMechanics{get;set;}
+        public boolean isCarpentry{get;set;}
+        public boolean isConstruction{get;set;}
+        public boolean isFacilitiesManagement{get;set;}
+        public boolean isWasteManagement{get;set;}
+        public boolean isLandscaping{get;set;}
+        public boolean isCivilEngineering{get;set;}
+        public boolean isEngineering{get;set;}
+        
+        // Computer
+        public boolean isComputerScience{get;set;}
+        public boolean isInformationTechnology{get;set;}
+        public boolean isWebDesign{get;set;}
+        public boolean isGraphicDesign{get;set;}
+        public boolean isDataEntry{get;set;}
+        
+        // Tools and Equipment
+        public boolean isChainSawSkills{get;set;}
+        public boolean isHandTools{get;set;}
+        public boolean isHeavyEquipment{get;set;}
+        public boolean isShotgunUse{get;set;}
+        
+        // Outdoor skills
+        public boolean isAdventureEducation{get;set;}
+        public boolean isBackpacking{get;set;}
+        public boolean isBackCountryPatrol{get;set;}
+        public boolean isCamping{get;set;}
+        public boolean isBoating{get;set;}
+        public boolean isSwimming{get;set;}
+        //public boolean isScubaDiving{get;set;}
+        public boolean isFarming{get;set;}
+        public boolean isWhiteWaterSkills{get;set;}
+        public boolean isRockClimbing{get;set;}
+        public boolean isTrailMaintenance{get;set;}
+        public boolean isHunting{get;set;}
+        public boolean isOrienteeringCompassSkills{get;set;}
+        public boolean isCaving{get;set;}
+        public boolean isHorsebackRiding{get;set;}
+        
+        // Working with the Public
+        public boolean isInterpretation{get;set;}
+        public boolean isEnvironmentalEducation{get;set;}
+        public boolean isWorkingwithChildren{get;set;}
+        public boolean isMoneyHandling{get;set;}
+        public boolean isCommunityEngagement{get;set;}
+        public boolean isCustomerService{get;set;}
+        public boolean isPublicSpeaking{get;set;}
+        public boolean isEducation{get;set;}
+        
+        // Practical Research Skills
+        public boolean isFieldResearch{get;set;}
+        public boolean isLabResearch{get;set;}
+        public boolean isPlantIdentification{get;set;}
+        public boolean isBirdIdentification{get;set;}
+        public boolean isRadioTelemetry{get;set;}
+        public boolean isFireScience{get;set;}
+        public boolean isMathematics{get;set;}
+        public boolean isStatistics{get;set;}
+        public boolean isChemistry{get;set;}
+        public boolean isWaterQualityTesting{get;set;}
+        
+        // Biological Sciences - Animal
+        public boolean isBiology{get;set;}
+        public boolean isAquaculture{get;set;}
+        public boolean isOrnithology{get;set;}
+        public boolean isHerpetology{get;set;}
+        public boolean isAnimalTaxonomy{get;set;}
+        public boolean isEntomology{get;set;}
+        public boolean isFisheriesScience{get;set;}
+        public boolean isZoology{get;set;}
+        public boolean isMarineBiology{get;set;}
+        
+        // Biological Sciences - Plant
+        public boolean isBotany{get;set;}
+        public boolean isForestry{get;set;}
+        public boolean isHorticulture{get;set;}
+        public boolean isEcologicalRestoration{get;set;}
+        public boolean isLandscapeDesign{get;set;}
+        public boolean isPlantTaxonomy{get;set;}
+        public boolean isWildlifeBiology{get;set;}
+        
+        // Earth Science
+        public boolean isPaleontology{get;set;}
+        public boolean isArchaeology{get;set;}
+        public boolean isGeography{get;set;}
+        public boolean isGeology{get;set;}
+        public boolean isHydrology{get;set;}
+        public boolean isSoilScience{get;set;}
+        public boolean isEcology{get;set;}
+        public boolean isCartography{get;set;}
+        public boolean isGIS_GeographicInformationSystems{get;set;}
+        public boolean isGPS_GlobalPositioningSystems{get;set;}
+        public boolean isAtmosphericScience{get;set;}
+        
+        // Natural Resources
+        public boolean isResourceMangement{get;set;}
+        public boolean isRecreationManagement{get;set;}
+        public boolean isRangeManagement{get;set;}
+        public boolean isUrbanStudies{get;set;}
+        public boolean isLandscapeArchitecture{get;set;}
+        public boolean isHistoricPreservation{get;set;}
+        public boolean isWildLifeManagement{get;set;}
+        public boolean isSustainability{get;set;}
+         
+        // Cultural Sciences
+        public boolean isAnthropology{get;set;}
+        public boolean isNativeAmericanStudies{get;set;}
+        public boolean isNaturalHistory{get;set;}
+        public boolean isAmericanHistory{get;set;}
+        public boolean isHistory{get;set;}
+        
+        // Creative Skills/Fine Arts
+        public boolean isPerformingArts{get;set;}
+        public boolean isPhotography{get;set;}
+        public boolean isWritingPublishing{get;set;}
+        
+        // Project Leadership Skills
+        public boolean isLeadershipExpereince{get;set;}
+        public boolean isVolunteerCoordination{get;set;}
+        
+        // Business Skills
+        public boolean isEconomics{get;set;}
+        public boolean isMarketing{get;set;}
+        public boolean isCommunications{get;set;}
+        
+        // Public Safety/Health
+        public boolean isRiskManagement{get;set;}
+        //public boolean isLifeguard{get;set;}
+        public boolean isPublicSafetyHealth{get;set;}
+        
+        // Wrapper class constructor
+        public SkillsEducationWrapper(){
+        }
+    }
+}

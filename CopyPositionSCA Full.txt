@@ -1,0 +1,917 @@
+/*
+    Code Log 
+  =====================================================================================================
+  Date              Owner               Comment
+  =====================================================================================================
+  25-Jan-2013     Devendra Sawant       SCA-400  
+ 
+ */
+
+public class CopyPositionSCA
+{
+    Public Map<String, Schema.SObjectField> describeFieldMap { get; set;}
+    Public Position__c Position{get;set;}
+    Public Position__c ClonePosition{get;set;}
+    Public string PositionID{get;set;}
+    Public string CopyPositionID{get;set;}
+    
+    //for Old Postion 
+    
+    public Position__c oldPosition
+    {
+        get{
+             if(this.oldPosition == null)
+                 this.oldPosition = new Position__c();
+             return this.oldPosition;    
+        }set;
+    }
+    
+    public SkillsEducationPartnerController objClass;
+    
+    
+    public CopyPositionSCA() 
+    {
+    }
+    
+    public CopyPositionSCA(ApexPages.StandardController controller) 
+    {
+        Position = new Position__c();
+        ClonePosition = new Position__c();
+        
+        if(System.currentPagereference().getParameters().get('id') != null)
+        {
+            PositionID = System.currentPagereference().getParameters().get('Id');
+            
+            describeFieldMap = Schema.SObjectType.Position__c.fields.getMap();
+            String[] describeFieldList = new List<String>(describeFieldMap.keySet());
+            describeFieldList.sort();
+        
+            String executeQuery = 'select ';
+            
+            for(String describeField : describeFieldList)
+            {
+                executeQuery += describeField + ',';
+            }
+            executeQuery  = executeQuery.substring(0,executeQuery.Length() - 1);
+            executeQuery += ' from Position__c';
+            executeQuery += ' where id=\'' + PositionID  + '\' limit 1';
+            
+            Position = Database.query(executeQuery);
+        }
+    }
+    
+   /* Modified by Niket Chandane on 14/1/2013 for SCA-343*/ 
+    public PageReference copyPosition()
+    {
+        ClonePosition = PortalPositionCopy(ClonePosition, Position);
+        ClonePosition.Position_Status__c = 'Draft';
+        if(ClonePosition.Opportunity__c!=Null)
+        {
+            ClonePosition.Opportunity__c=Null;
+        }
+        if(ClonePosition.Ops_Director_Approval_Status__c!=Null)
+        {
+            ClonePosition.Ops_Director_Approval_Status__c='';
+        }
+        if(ClonePosition.Ops_Director_Approval_Date__c!=Null)
+        {
+            ClonePosition.Ops_Director_Approval_Date__c=Null;
+        }
+        if(ClonePosition.Ops_Director_Approval_By__c!=Null && ClonePosition.Ops_Director_Approval_By__c!='')
+        {
+            ClonePosition.Ops_Director_Approval_By__c='';
+        }
+        ClonePosition.Master_Approved_Estimate__c = '';
+        insert ClonePosition;
+          
+        if(this.oldPosition.Id != null)
+            update this.oldPosition;
+        
+        System.debug('this.oldPosition====>'+this.oldPosition);
+        
+        Opportunity optr = new Opportunity();
+        if(Position.Opportunity__c != Null)
+        {
+           optr = [Select id,Name from Opportunity where Id =: Position.Opportunity__c];
+        }
+        
+        PositionDashBoardController objPDC = new PositionDashBoardController();
+        objPDC.copyContactToPosition(PositionID,ClonePosition);
+        objPDC.copyHazard(PositionID,ClonePosition);
+        objPDC.copyLocation(PositionID,ClonePosition);
+        
+        PageReference Page = Null;
+        if(Position.Opportunity__c != Null)
+        {
+            Page = new PageReference('/' + ClonePosition.id + '/e?CF00N40000002Lh5Z=' + optr.Name + '&retURL=' + ClonePosition.id);
+            
+        }
+        else
+        {
+            Page = new PageReference('/' + ClonePosition.id + '/e?retURL=' + ClonePosition.id);
+        }
+        
+        return Page;    
+    }
+    
+    Public PageReference SCAPositionCopy()
+    {
+        List<Hazard__c> OldHazard = new List<Hazard__c>();
+        List<Hazard__c> NewHazard = new List<Hazard__c>();
+        
+        List<Contact_to_Position__c> OldCTP = new List<Contact_to_Position__c>();
+        List<Contact_to_Position__c> NewCTP = new List<Contact_to_Position__c>();
+        
+        OldHazard = [Select id,Mitigation_Strategy__c,Other_Sub_Type__c,Other_Type__c,Probability__c,
+                     Severity__c,Sub_Category__c,Sub_Type__c,Type__c
+                     from Hazard__c where Position__c=:PositionID];
+        
+        OldCTP = [Select id,Contact_Role__c,Partner_Contact__c from Contact_to_Position__c where Position__c=:PositionID];
+        
+        //ClonePosition.RecordTypeID = Position.RecordTypeID;
+        //ClonePosition.Partner__c=  Position.Partner__c;
+        //ClonePosition.Partner_Contact__c=  Position.Partner_Contact__c;
+        //ClonePosition.AmeriCorps_Award_Hours__c=  Position.AmeriCorps_Award_Hours__c;
+        //ClonePosition.AmeriCorps_Award_Inventory__c=  Position.AmeriCorps_Award_Inventory__c;
+        //ClonePosition.City__c=  Position.City__c;
+        //ClonePosition.Desired_Outcomes__c=  Position.Desired_Outcomes__c;
+        //ClonePosition.Funding_Doc_Needed__c=  Position.Funding_Doc_Needed__c;
+        //ClonePosition.Housing_Location_Site__c=  Position.Housing_Location_Site__c;
+        //ClonePosition.Flexibility_With_Dates__c=  Position.Flexibility_With_Dates__c;
+        //ClonePosition.Number_of_Weeks_Applicant_Will_Serve__c=  Position.Number_of_Weeks_Applicant_Will_Serve__c;
+        //ClonePosition.Insurance_Available__c=  Position.Insurance_Available__c;
+        //ClonePosition.Organization_Sub_Type__c=  Position.Organization_Sub_Type__c;
+        //ClonePosition.Organization_Type__c=  Position.Organization_Type__c;
+        //ClonePosition.Partner_Contact_Owner_ID__c=  Position.Partner_Contact_Owner_ID__c;
+        //ClonePosition.Actual_Number_of_Openings__c=  Position.Actual_Number_of_Openings__c;
+        //ClonePosition.Agency__c=  Position.Agency__c;
+        ClonePosition.Funding_Doc_Sent_Date__c =  Position.Funding_Doc_Sent_Date__c;
+        ClonePosition.Master_Approved_Estimate__c = '';
+        ClonePosition.Copy_From_Position__c = Position.name;
+        //ClonePosition.American_History__c=  Position.American_History__c;
+        ClonePosition.Americorps_Minimum_Required_Hours__c=  Position.Americorps_Minimum_Required_Hours__c;
+        ClonePosition.Anthropology__c=  Position.Anthropology__c;
+        //ClonePosition.Archaeology__c=  Position.Archaeology__c;
+        //ClonePosition.Archives__c=  Position.Archives__c;
+        ClonePosition.Biology__c=  Position.Biology__c;
+        ClonePosition.BirdIdentification__c=  Position.BirdIdentification__c;
+        //ClonePosition.Boat_Details__c=  Position.Boat_Details__c;
+        ClonePosition.Boating__c=  Position.Boating__c;
+        ClonePosition.Botany__c=  Position.Botany__c;
+        
+        ClonePosition.Camping__c=  Position.Camping__c;
+        ClonePosition.Carpentry__c=  Position.Carpentry__c;
+        ClonePosition.Cartography__c=  Position.Cartography__c;
+        //ClonePosition.Category__c=  Position.Category__c;
+        ClonePosition.Caving__c=  Position.Caving__c;
+        ClonePosition.Certification_Requirements__c=  Position.Certification_Requirements__c;
+        ClonePosition.Chain_Saw_Skills__c=  Position.Chain_Saw_Skills__c;
+        ClonePosition.Chemistry__c=  Position.Chemistry__c;
+        ClonePosition.Communications__c=  Position.Communications__c;
+        ClonePosition.Community_Relations__c=  Position.Community_Relations__c;
+        ClonePosition.Commuting_Allowance__c=  Position.Commuting_Allowance__c;
+        ClonePosition.Commuting_Required__c=  Position.Commuting_Required__c;
+        ClonePosition.Conservation_Request_Type__c=  Position.Conservation_Request_Type__c;
+        ClonePosition.Crew_Length__c=  Position.Crew_Length__c;
+        ClonePosition.Crew_Length_Other__c=  Position.Crew_Length_Other__c;
+        ClonePosition.Crew_Size__c=  Position.Crew_Size__c;
+        ClonePosition.Crew_Type__c=  Position.Crew_Type__c;
+        ClonePosition.Crew_Vehicle__c=  Position.Crew_Vehicle__c;
+        ClonePosition.Customer_Service__c=  Position.Customer_Service__c;
+        ClonePosition.End_Time__c=  Position.End_Time__c;
+        ClonePosition.Start_Time__c=  Position.Start_Time__c;
+        ClonePosition.Data_Entry__c=  Position.Data_Entry__c;
+        ClonePosition.Ecological_Restoration__c=  Position.Ecological_Restoration__c;
+        ClonePosition.Economics__c=  Position.Economics__c;
+        ClonePosition.Education__c=  Position.Education__c;
+        //ClonePosition.Educational_Opportunities__c=  Position.Educational_Opportunities__c;
+        ClonePosition.Electrician__c=  Position.Electrician__c;
+        //ClonePosition.Engineering__c=  Position.Engineering__c;
+        ClonePosition.Farming__c=  Position.Farming__c;
+        ClonePosition.Fire_Science__c=  Position.Fire_Science__c;
+        ClonePosition.Fisheries_Science__c=  Position.Fisheries_Science__c;
+        ClonePosition.Forestry__c=  Position.Forestry__c;
+        ClonePosition.GIS__c=  Position.GIS__c;
+        ClonePosition.GPS__c=  Position.GPS__c;
+        ClonePosition.Geography__c=  Position.Geography__c;
+        ClonePosition.Geology__c=  Position.Geology__c;
+        ClonePosition.Graphic_Design__c=  Position.Graphic_Design__c;
+        ClonePosition.Hand_Tools__c=  Position.Hand_Tools__c;
+        ClonePosition.Herpetology__c=  Position.Herpetology__c;
+        ClonePosition.Historical_Preservation__c=  Position.Historical_Preservation__c;
+        ClonePosition.Horseback_Riding__c=  Position.Horseback_Riding__c;
+        //ClonePosition.Horticulture__c=  Position.Horticulture__c;
+        ClonePosition.Hunting__c=  Position.Hunting__c;
+        //ClonePosition.Hydrology__c=  Position.Hydrology__c;
+        ClonePosition.Lab_Research__c=  Position.Lab_Research__c;
+        ClonePosition.Landscape_Architecture__c=  Position.Landscape_Architecture__c;
+        //ClonePosition.Landscaping__c=  Position.Landscaping__c;
+        ClonePosition.Lifeguard__c=  Position.Lifeguard__c;
+        ClonePosition.Type_of_CI_Work__c=  Position.Type_of_CI_Work__c;
+        ClonePosition.Manual_Stick_shift_Driving_Experience__c=  Position.Manual_Stick_shift_Driving_Experience__c;
+       
+        ClonePosition.Marketing__c=  Position.Marketing__c;
+        ClonePosition.Mathematics__c=  Position.Mathematics__c;
+       // ClonePosition.Mechanics__c=  Position.Mechanics__c;
+        ClonePosition.Money_Handling__c=  Position.Money_Handling__c;
+        ClonePosition.Native_American_Studies__c=  Position.Native_American_Studies__c;
+        ClonePosition.Natural_History__c=  Position.Natural_History__c;
+        ClonePosition.Need_to_Operate__c=  Position.Need_to_Operate__c;
+        ClonePosition.Need_to_Operate_Other__c=  Position.Need_to_Operate_Other__c;
+        //ClonePosition.No_Of_Vehicles__c=  Position.No_Of_Vehicles__c;
+        ClonePosition.Number_of_Leaders__c= Position.Number_of_Leaders__c;
+        ClonePosition.Number_of_Requested_Openings__c=  Position.Number_of_Requested_Openings__c;
+        ClonePosition.Ornithology__c=  Position.Ornithology__c;
+        ClonePosition.Other_Community_Work__c=  Position.Other_Community_Work__c;
+        ClonePosition.Other_Crew_Length__c=  Position.Other_Crew_Length__c;
+        //ClonePosition.Other_Crew_Work__c=  Position.Other_Crew_Work__c;
+        ClonePosition.Other_Logistical_Support_Provided__c=  Position.Other_Logistical_Support_Provided__c;
+        ClonePosition.Paleontology__c=  Position.Paleontology__c;
+        ClonePosition.Performing_Arts__c=  Position.Performing_Arts__c;
+        ClonePosition.Personal_Vehicle_Required__c= Position.Personal_Vehicle_Required__c;
+        ClonePosition.Photography__c=  Position.Photography__c;
+        
+        ClonePosition.Plant_Identification__c=  Position.Plant_Identification__c;
+        ClonePosition.Community_Crew_Length__c=  Position.Community_Crew_Length__c;
+        ClonePosition.Community_Crew_Size__c=  Position.Community_Crew_Size__c;
+        ClonePosition.Plumbing__c=  Position.Plumbing__c;
+        ClonePosition.Public_Speaking__c= Position.Public_Speaking__c;
+        ClonePosition.Radio_Telemetry__c=  Position.Radio_Telemetry__c;
+       
+        ClonePosition.Rock_Climbing__c=  Position.Rock_Climbing__c;
+        
+        ClonePosition.SCUBA_Diving__c=  Position.SCUBA_Diving__c;
+        ClonePosition.Secure_Storage_Space_Available__c=  Position.Secure_Storage_Space_Available__c;
+        ClonePosition.Shotgun_Use__c=  Position.Shotgun_Use__c;
+        //ClonePosition.Soil_Science__c= Position.Soil_Science__c;
+        ClonePosition.Statistics__c=  Position.Statistics__c;
+        ClonePosition.Successful_Candidate_Attributes__c=  Position.Successful_Candidate_Attributes__c;
+        ClonePosition.Sustainability__c=  Position.Sustainability__c;
+        ClonePosition.Swimming__c=  Position.Swimming__c;
+        ClonePosition.Taxonomy_Animal__c=  Position.Taxonomy_Animal__c;
+        ClonePosition.Technical_Skills__c=  Position.Technical_Skills__c;
+        
+        ClonePosition.Trail_Maintenance__c=  Position.Trail_Maintenance__c;
+//      ClonePosition.Training_Provided__c=  Position.Training_Provided__c;
+        ClonePosition.Type_of_Community_Work__c= Position.Type_of_Community_Work__c;
+        ClonePosition.Type_of_Crew_Work__c=  Position.Type_of_Crew_Work__c;
+        ClonePosition.US_Citizenship__c=  Position.US_Citizenship__c;
+        ClonePosition.Volunteer_Coordination__c=  Position.Volunteer_Coordination__c;
+        ClonePosition.Water_Quality_Testing__c=  Position.Water_Quality_Testing__c;
+        ClonePosition.Web_Site_Design__c=  Position.Web_Site_Design__c;
+        ClonePosition.White_Water_Skills__c=  Position.White_Water_Skills__c;
+        ClonePosition.Wildland_Fire_Fighting__c=  Position.Wildland_Fire_Fighting__c;
+                
+        
+        //------------New fields added on 06-02-2012----------------------------------
+        
+        ClonePosition.X4_Wheel_Drive_Experience__c=  Position.X4_Wheel_Drive_Experience__c;
+        ClonePosition.Access_to_Personal_Vehicle__c=  Position.Access_to_Personal_Vehicle__c;
+        ClonePosition.Agency_Trail_or_Maintenance_Staff_Join__c=  Position.Agency_Trail_or_Maintenance_Staff_Join__c;
+       // ClonePosition.Back_Country_Patrol__c=  Position.Back_Country_Patrol__c;
+        ClonePosition.Backcountry_Rating__c=  Position.Backcountry_Rating__c;
+        ClonePosition.Basecamp_Is__c=  Position.Basecamp_Is__c;
+        ClonePosition.Basecamp_to_Project_Commute_Time__c=  Position.Basecamp_to_Project_Commute_Time__c;
+        ClonePosition.Basecamp_to_Project_Travel__c=  Position.Basecamp_to_Project_Travel__c;
+        ClonePosition.Basecamp_to_Project_Travel_Other__c=  Position.Basecamp_to_Project_Travel_Other__c;
+        ClonePosition.Benefits_Notes__c=  Position.Benefits_Notes__c;
+        ClonePosition.Commuting_Weekly_Allowance__c=  Position.Commuting_Weekly_Allowance__c;
+        ClonePosition.Computer_Science__c=  Position.Computer_Science__c;
+        ClonePosition.Construction__c=  Position.Construction__c;
+        ClonePosition.Days__c=  Position.Days__c;
+        ClonePosition.Days_of_the_week__c=  Position.Days_of_the_week__c;
+        ClonePosition.Environmental_Ed_Supplies__c=  Position.Environmental_Ed_Supplies__c;
+        ClonePosition.Environmental_Education__c=  Position.Environmental_Education__c;
+        //ClonePosition.Facility_Accessiblity__c=  Position.Facility_Accessiblity__c;
+        ClonePosition.Field_Based_Meals__c=  Position.Field_Based_Meals__c;
+        ClonePosition.Field_Research__c=  Position.Field_Research__c;
+        ClonePosition.Field_Supplies__c=  Position.Field_Supplies__c;
+        ClonePosition.Field_Trips__c=  Position.Field_Trips__c;
+        ClonePosition.Handicap_Accessible__c=  Position.Handicap_Accessible__c;
+        ClonePosition.Heavy_Equipment__c = Position.Heavy_Equipment__c;
+        //ClonePosition.If_yes_about_how_far__c=  Position.If_yes_about_how_far__c;
+        //ClonePosition.Individual_or_team_based_solution__c=  Position.Individual_or_team_based_solution__c;
+        ClonePosition.Interested_In_Diversity_Intern__c=  Position.Interested_In_Diversity_Intern__c;
+        //ClonePosition.Intern_Option_For_Housing__c=  Position.Intern_Option_For_Housing__c;
+        //ClonePosition.Interpretation__c=  Position.Interpretation__c;
+        //ClonePosition.Is_this_worksite_near_public_transport__c=  Position.Is_this_worksite_near_public_transport__c;
+        ClonePosition.License_Valid_for_at_Least_3_Years__c=  Position.License_Valid_for_at_Least_3_Years__c;
+        //ClonePosition.Park_Location__c=  Position.Park_Location__c;
+        ClonePosition.Miles_From_Main_Road__c=  Position.Miles_From_Main_Road__c;
+        //ClonePosition.Mobile_Phone__c=  Position.Mobile_Phone__c;
+        ClonePosition.Moving_Basecamps__c=  Position.Moving_Basecamps__c;
+        //ClonePosition.Museum_Studies__c=  Position.Museum_Studies__c;
+        ClonePosition.Nearest_Airport_Location__c = Position.Nearest_Airport_Location__c;
+        ClonePosition.Obtaining_Potable_Water__c=  Position.Obtaining_Potable_Water__c;
+        ClonePosition.Who_are_you_requesting_for__c=  Position.Who_are_you_requesting_for__c;
+        ClonePosition.Other_Agency_Type_of_Organization__c=  Position.Other_Agency_Type_of_Organization__c;
+        //ClonePosition.Other_Organization__c=  Position.Other_Organization__c;
+        ClonePosition.OwnerId=  Position.OwnerId;
+        ClonePosition.Partner_Contact__c=  Position.Partner_Contact__c;
+        ClonePosition.Partner__c=  Position.Partner__c;
+        ClonePosition.RecordTypeId=Position.RecordTypeId;
+        ClonePosition.Placement_Considerations__c=  Position.Placement_Considerations__c;
+        ClonePosition.Planning_and_Field_Management__c=  Position.Planning_and_Field_Management__c;
+        ClonePosition.Location_City__c=  Position.Location_City__c;
+        ClonePosition.Position_Description__c=  Position.Position_Description__c;
+        ClonePosition.Location_Description__c=  Position.Location_Description__c;
+        ClonePosition.Position_Headline__c=  Position.Position_Headline__c;
+        ClonePosition.Position_Address__c=  Position.Position_Address__c;
+        ClonePosition.State__c=  Position.State__c;
+        ClonePosition.Location_Street_1__c=  Position.Location_Street_1__c;
+        ClonePosition.Location_Street_2__c=  Position.Location_Street_2__c;
+        ClonePosition.Location_Zip__c=  Position.Location_Zip__c;
+        ClonePosition.Program_Name__c=  Position.Program_Name__c;
+        ClonePosition.Recreation_Management__c=  Position.Recreation_Management__c;
+        ClonePosition.Regional_Preference__c=  Position.Regional_Preference__c;
+        ClonePosition.Requirement_Of_Car__c=  Position.Requirement_Of_Car__c;
+        ClonePosition.Resource_Management__c=  Position.Resource_Management__c;
+        ClonePosition.Sit_to_Airport_Commute_Time__c=  Position.Sit_to_Airport_Commute_Time__c;
+        //ClonePosition.Team__c=  Position.Team__c;
+        ClonePosition.Text_For_Newspaper_Ad__c=  Position.Text_For_Newspaper_Ad__c;
+        ClonePosition.Position_Title__c=  Position.Position_Title__c;
+        ClonePosition.Tools_and_Equipment__c=  Position.Tools_and_Equipment__c;
+        //ClonePosition.Transportation_Medium__c=  Position.Transportation_Medium__c;
+        ClonePosition.Urban_Studies__c=  Position.Urban_Studies__c;
+        ClonePosition.Do_you_have_a_drivers_License__c=  Position.Do_you_have_a_drivers_License__c;
+        ClonePosition.Workers_Comp_Covered_By__c=  Position.Workers_Comp_Covered_By__c;
+        ClonePosition.Working_with_Children__c=  Position.Working_with_Children__c;
+        ClonePosition.Publishing__c=  Position.Publishing__c;
+        ClonePosition.Zip_Code__c=  Position.Zip_Code__c;
+        //-------------------------End here----------------------------------------------
+       
+       //---------------------------New Field add on 20 Nov 2012-------------------------
+      
+        ClonePosition.Facilities_Maintenance__c =  Position.Facilities_Maintenance__c;
+        ClonePosition.Civil_Engineering__c=  Position.Civil_Engineering__c;
+        ClonePosition.Information_Technology__c =  Position.Information_Technology__c;
+        ClonePosition.Adventure_Education__c =  Position.Adventure_Education__c;
+        ClonePosition.Zoology__c=  Position.Zoology__c;
+        ClonePosition.Marine_Biology__c =  Position.Marine_Biology__c;
+        ClonePosition.Landscape_Design__c =  Position.Landscape_Design__c;
+       // ClonePosition.Plant_Taxonomy__c =  Position.Plant_Taxonomy__c;
+        ClonePosition.Wildlife_Biology__c =  Position.Wildlife_Biology__c;
+       // ClonePosition.Ecology__c=  Position.Ecology__c;
+        ClonePosition.Atmospheric_Science__c=  Position.Atmospheric_Science__c;
+        ClonePosition.Risk_Management2__c =  Position.Risk_Management2__c;
+        ClonePosition.Public_Safety_Health__c =  Position.Public_Safety_Health__c;
+        ClonePosition.Funding_Comments__c = '';
+        
+       //-------------------------End here-----------------------------------------------
+       
+        try
+        {
+            insert ClonePosition;
+            
+            //--------------Copy Partner Contact---------------------------
+            
+            if(OldCTP.size()>0)
+            {
+                for(Contact_to_Position__c  CTP : OldCTP)
+                {
+                    Contact_to_Position__c InsertCTP = new Contact_to_Position__c();
+                    
+                    InsertCTP.Contact_Role__c = CTP.Contact_Role__c;
+                    InsertCTP.Partner_Contact__c = CTP.Partner_Contact__c ;
+                    InsertCTP.Position__c = ClonePosition.ID;
+                    
+                    NewCTP.add(InsertCTP);
+                }
+                insert NewCTP;
+            }
+            //-------------------End Here------------------------------------
+            
+            //--------------Copy Partner Contact---------------------------
+            
+            if(OldHazard.size()>0)
+            {
+                for(Hazard__c Hazard : OldHazard)
+                {
+                    Hazard__c  InsertHazard = new Hazard__c();
+                    
+                    //InsertHazard.Category__c= Hazard.Category__c;
+                    InsertHazard.Mitigation_Strategy__c= Hazard.Mitigation_Strategy__c;
+                    InsertHazard.Other_Sub_Type__c= Hazard.Other_Sub_Type__c;
+                    InsertHazard.Other_Type__c= Hazard.Other_Type__c;
+                    InsertHazard.Probability__c= Hazard.Probability__c;
+                    InsertHazard.Severity__c= Hazard.Severity__c;
+                    InsertHazard.Sub_Category__c= Hazard.Sub_Category__c;
+                    InsertHazard.Sub_Type__c= Hazard.Sub_Type__c;
+                    InsertHazard.Type__c= Hazard.Type__c;
+                    InsertHazard.Position__c = ClonePosition.ID;
+                    
+                    NewHazard.add(InsertHazard);
+                }
+                insert NewHazard;
+            }
+            //-------------------End Here------------------------------------
+            
+            PageReference Page = new PageReference('/' + ClonePosition.id + '/e?retURL=' + ClonePosition.id);
+            return Page;
+        }
+        catch(exception ex)
+        {
+            ApexPages.addmessages(ex);
+            return null;
+        }
+    }
+    
+    // This method is called to update older position for following fields, as these fields are new fields
+    // SelectedSkillsAndEducation__c, 
+    // Selected_Skills_Count__c, Selected_Educations_Count__c
+    
+    public void copySelectedSkillsAndEducationToOlderPosition(Position__c Position)
+    {
+        String positionId = Position.Id;
+        String strFields = '';
+        SObjectType sot = Schema.getGlobalDescribe().get('Position__c');
+        List<Schema.SObjectField> lstFields = sot.getDescribe().fields.getMap().values();
+        
+        for(Schema.Sobjectfield so : lstFields) {
+            Schema.DescribeFieldResult dfr = so.getDescribe();
+            strFields += dfr.getName() + ',';
+        }
+        
+        if (strFields.endsWith(','))
+            strFields = strFields.substring(0,strFields.lastIndexOf(','));
+        
+        System.debug('All Position Fields===>'+strFields);
+        String strQuery = 'SELECT ' + strFields + ' FROM Position__c WHERE Id =: positionId';
+        Position__c objPosition = Database.query(strQuery);
+        System.debug('Position to be checked for skills and education==>'+objPosition);
+        
+        
+        
+        System.debug('--- 1 objPosition.SelectedSkillsAndEducation__c --->' + objPosition.SelectedSkillsAndEducation__c);
+        if(objPosition.SelectedSkillsAndEducation__c == null || objPosition.SelectedSkillsAndEducation__c == ''){
+            objPosition.SelectedSkillsAndEducation__c = saveSelectedSkillsAndEducationInLongTextArea(objPosition);
+            if(this.oldPosition.Id == null)
+                    this.oldPosition = new Position__c(Id = objPosition.Id);
+            this.oldPosition.SelectedSkillsAndEducation__c = objPosition.SelectedSkillsAndEducation__c;
+            this.oldPosition.Selected_Skills_Count__c = countSkills(objPosition);
+            this.oldPosition.Selected_Educations_Count__c = countEducations(objPosition);
+        }
+    }
+    
+    
+    
+    Public Position__c PortalPositionCopy(Position__c ClonePosition ,Position__c Position)
+    {
+        copySelectedSkillsAndEducationToOlderPosition(position);
+        
+        List<Schema.FieldSetMember> RemovedSkillsandEduList = SObjectType.Position__c.FieldSets.Invalid_Skills_and_Educations.getFields();
+        Set <String> RemovedSkillsandEduListset = new Set<String>();
+        for(Schema.FieldSetMember obj : RemovedSkillsandEduList)
+        {
+            RemovedSkillsandEduListset.add(obj.getFieldPath());
+        }
+        system.debug('RemovedSkillsandEduListset>>>>>>>'+RemovedSkillsandEduListset);       
+        
+        Set<String> setPositionMapingValue = new Set<String>(Position_Fields_Not_To_Be_Copied__c.getAll().keySet());
+        Map<String,String> MapKeyValue = new Map<String,String>();
+        
+        for(String strValue : setPositionMapingValue)
+            MapKeyValue.put(String.valueOf(Position_Fields_Not_To_Be_Copied__c.getValues(strValue).FieldAPIName__c),String.valueOf(Position_Fields_Not_To_Be_Copied__c.getValues(strValue)));
+        
+        Id PId = Position.Id;   
+        String strFields = '';
+        SObjectType sot = Schema.getGlobalDescribe().get('Position__c');
+        List<Schema.SObjectField> lstFields = sot.getDescribe().fields.getMap().values();
+        for(Schema.Sobjectfield so : lstFields) {
+            Schema.DescribeFieldResult dfr = so.getDescribe();
+            if (dfr.isCreateable() && String.valueOf(dfr.getType())!='Date' && !MapKeyValue.containsKey(dfr.getName()) && !RemovedSkillsandEduListset.contains(dfr.getName()) && !dfr.isUnique()) {
+                strFields += dfr.getName() + ',';
+            }
+        }
+        
+        if (strFields.endsWith(','))
+            strFields = strFields.substring(0,strFields.lastIndexOf(','));
+        
+        /*
+            Modified BY : Niket Chandane
+            Modified At : 23 jan 2013 
+            Summary     : SCA-392 (Completed) 
+        */
+        System.debug('--- strFields --->' + strFields);
+        String strQuery = 'SELECT Name,' + strFields + ' FROM Position__c WHERE Id = :PId';
+        Position__c cSource = Database.query(strQuery);
+        System.debug('--- cSource --->' + cSource);
+        
+        cSource.Type_of_CI_Work__c = copyMainAreaOfFocus(cSource);
+        
+        cSource.SelectedSkillsAndEducation__c = saveSelectedSkillsAndEducationInLongTextArea(cSource);
+        
+        cSource.Selected_Skills_Count__c = countSkills(cSource);
+             
+        cSource.Selected_Educations_Count__c = countEducations(cSource);
+        
+        
+        // Clone and Insert Clone
+        
+        ClonePosition = cSource.clone();
+        
+        
+        ClonePosition.Copy_From_Position__c = cSource.Name;
+        ClonePosition.Selected_Skills_Count__c = cSource.Selected_Skills_Count__c;
+        ClonePosition.Selected_Educations_Count__c = cSource.Selected_Educations_Count__c;
+        ClonePosition.Type_of_CI_Work__c = cSource.Type_of_CI_Work__c;
+        ClonePosition.SelectedSkillsAndEducation__c = saveSelectedSkillsAndEducationInLongTextArea(cSource);
+        ClonePosition.Master_Approved_Estimate__c = '';
+        ClonePosition.Funding_Comments__c = '';
+        ClonePosition.Funding_Document__c = '';
+        ClonePosition.Who_is_Funding_Your_Position__c = '';
+        ClonePosition.Funding_Document_Number__c = '';
+        ClonePosition.Is_Funding_Confirmed_for_any_Openings__c = '';
+        ClonePosition.Agreement_Manager__c = '';
+        ClonePosition.Special_Funding_Source__c = '';
+        ClonePosition.Funding_Doc_Needed__c = true;
+        return ClonePosition; 
+    }
+    
+    public String copyMainAreaOfFocus(Position__c cSource){
+        String areaOfFocus = '';
+        String picklistValuesToCheck = '';
+        Set<String> checkingValues = new Set<String>();
+        
+        if(cSource.RecordTypeId != null){
+                RecordType rt = [Select Id, Name from RecordtYpe where Id=: cSource.RecordTypeId limit 1];
+                List<Copy_Main_Area_of_Focus_Setting__c> lstCopyMainAreaOfFocus = Copy_Main_Area_of_Focus_Setting__c.getall().values();
+                String strPicklistValuesToCheck = '';
+                if(!lstCopyMainAreaOfFocus.isEmpty()){
+                    for(Copy_Main_Area_of_Focus_Setting__c copy : lstCopyMainAreaOfFocus){
+                        if(rt.Name == copy.Name){
+                            strPicklistValuesToCheck = copy.Picklist_valules_to_avoid_copy__c;
+                            break;
+                        }
+                }
+                List<String> lstPicklistValues = new List<String>(); 
+                lstPicklistValues = strpicklistValuesToCheck.split(';');
+                
+                System.debug('lstPicklistValues==>'+lstPicklistValues);
+                for(Integer i=0; i < lstPicklistValues.size();i++){
+                    checkingValues.add(lstPicklistValues[i]);
+                }
+                
+                System.debug('checkingValues===>'+checkingValues);
+                System.debug('cSource.Type_of_CI_Work__c==>'+cSource.Type_of_CI_Work__c);
+                System.debug('COndition==>'+checkingValues.contains(cSource.Type_of_CI_Work__c));
+                if(!checkingValues.contains(cSource.Type_of_CI_Work__c)){
+                        areaOfFocus = '';
+                }else{
+                        areaOfFocus = cSource.Type_of_CI_Work__c;
+                }
+            }
+        }
+        return areaOfFocus;
+    }
+    
+    //Method to save selected skills SelectedSkillsAndEducation custom field in Position__c
+    public String saveSelectedSkillsAndEducationInLongTextArea(Position__c position)
+    {
+         String skills = '';
+    
+        if(position.Atmospheric_Science__c != null)
+            skills += 'Atmospheric_Science__c:';
+        
+        if(position.Biology__c != null)
+            skills += 'Biology__c:';
+        if(position.Botany__c != null)
+            skills += 'Botany__c:';
+       
+        if(position.Communications__c != null)
+            skills += 'Communications__c:';
+        if(position.Geology__c != null)
+            skills += 'Geology__c:';
+       // if(position.Ecology__c != null)
+        //    skills += 'Ecology__c:';
+        
+        // Tools and Equipment
+        if(position.Education__c != null)
+            skills += 'Education__c:';
+        if(position.Forestry__c != null)
+            skills += 'Forestry__c:';
+        if(position.History__c != null)
+            skills += 'History__c:';
+        if(position.Mathematics__c != null)
+            skills += 'Mathematics__c:';
+        
+            // Outdoor Skills
+        if(position.Recreation_Management__c != null)
+            skills += 'Recreation_Management__c:';
+        if(position.Resource_Management__c != null)
+            skills += 'Resource_Management__c:';
+        if(position.Anthropology__c != null)
+            skills += 'Anthropology__c:';
+        
+        /*if(position.Swimming__c != null)
+            skills += 'Swimming__c:';
+        if(position.Farming__c != null)
+            skills += 'Farming__c:';
+        if(position.White_Water_Skills__c != null)
+            skills += 'White_Water_Skills__c:';
+        if(position.Rock_Climbing__c != null)
+            skills += 'Rock_Climbing__c:';
+        if(position.Trail_Maintenance__c != null)
+            skills += 'Trail_Maintenance__c:';
+        if(position.Hunting__c != null)
+            skills += 'Hunting__c:';
+        if(position.Orienteering_compass_skills__c != null)
+            skills += 'Orienteering_compass_skills__c:';
+        if(position.Caving__c != null)
+            skills += 'Caving__c:';
+        if(position.Horseback_Riding__c != null)
+            skills += 'Horseback_Riding__c:';
+        
+        // Working with the Public  
+        if(position.Working_with_Children__c != null)
+            skills += 'Working_with_Children__c:';
+        if(position.Money_Handling__c != null)
+            skills += 'Money_Handling__c:';
+        if(position.Community_Engagement__c != null)
+            skills += 'Community_Engagement__c:';
+        if(position.Customer_Service__c != null)
+            skills += 'Customer_Service__c:';
+        if(position.Public_Speaking__c != null)
+        skills += 'Public_Speaking__c:';
+        
+        // Practical Research Skill
+        
+        if(position.Data_Entry__c != null)
+            skills += 'Data_Entry__c:';
+        if(position.Field_Research__c != null)
+            skills += 'Field_Research__c:'; 
+        if(position.Plant_Identification__c != null)
+            skills += 'Plant_Identification__c:';   
+        if(position.BirdIdentification__c != null)
+            skills += 'BirdIdentification__c:'; 
+        if(position.Radio_Telemetry__c != null)
+            skills += 'Radio_Telemetry__c:';    
+        if(position.Water_Quality_Testing__c != null)
+            skills += 'Water_Quality_Testing__c:';
+        
+        // Earth Science        
+        if(position.GIS__c != null)
+            skills += 'GIS__c:';
+        if(position.GPS__c != null)
+            skills += 'GPS__c:';
+        if(position.Performing_Arts__c != null)
+            skills += 'Performing_Arts__c:';
+        if(position.Leadership_Experience__c != null)
+            skills += 'Leadership_Experience__c:';
+        if(position.Volunteer_Coordination__c != null)
+            skills += 'Volunteer_Coordination__c:';
+        
+        if(position.Computer_Science__c != null)
+            skills += 'Computer_Science__c:';
+        if(position.Information_Technology__c != null)
+            skills += 'Information_Technology__c:';
+        if(position.Web_Site_Design__c != null)
+            skills += 'Web_Site_Design__c:';
+        if(position.Graphic_Design__c != null)
+            skills += 'Graphic_Design__c:';
+        
+        // Outdoor skills   
+        if(position.Adventure_Education__c != null)
+            skills += 'Adventure_Education__c:';
+        
+        // Working with the Public
+        if(position.Interpretation__c != null)
+            skills += 'Interpretation__c:';
+        if(position.Environmental_Education__c != null)
+            skills += 'Environmental_Education__c:';
+        if(position.Education__c != null)
+            skills += 'Education__c:';
+        
+        // Practical Research skills    
+        if(position.Lab_Research__c != null)
+            skills += 'Lab_Research__c:';
+        if(position.Fire_Science__c != null)
+            skills += 'Fire_Science__c:';
+        if(position.Mathematics__c != null)
+            skills += 'Mathematics__c:';
+        if(position.Statistics__c != null)
+            skills += 'Statistics__c:';
+        if(position.Chemistry__c != null)
+            skills += 'Chemistry__c:';
+        
+        // Biological Sciences - Animal
+        if(position.Biology__c != null)
+            skills += 'Biology__c:';
+        if(position.Aquaculture__c != null)
+            skills += 'Aquaculture__c:';
+        if(position.Ornithology__c != null)
+            skills += 'Ornithology__c:';
+        if(position.Herpetology__c != null)
+            skills += 'Herpetology__c:';
+        if(position.Taxonomy_Animal__c != null)
+            skills += 'Taxonomy_Animal__c:';
+        if(position.Entomology__c != null)
+            skills += 'Entomology__c:';
+        if(position.Fisheries_Science__c != null)
+            skills += 'Fisheries_Science__c:';
+        if(position.Zoology__c != null)
+            skills += 'Zoology__c:';
+        if(position.Marine_Biology__c != null)
+            skills += 'Marine_Biology__c:'; 
+        if(position.Wildlife_Biology__c != null)
+            skills += 'Wildlife_Biology__c:';   
+        
+        // Biological Sciences - Plant
+        if(position.Botany__c != null)
+            skills += 'Botany__c:';
+        if(position.Forestry__c != null)
+            skills += 'Forestry__c:';
+        if(position.Horticulture__c != null)
+            skills += 'Horticulture__c:';
+        if(position.Ecological_Restoration__c != null)
+            skills += 'Ecological_Restoration__c:';
+        //if(position.Landscape_Design__c != null)
+           // skills += 'Landscape_Design__c:';
+        if(position.Plant_Taxonomy__c != null)
+            skills += 'Plant_Taxonomy__c:';
+        
+        // Earth Science
+        if(position.Paleontology__c != null)
+            skills += 'Paleontology__c:';
+        if(position.Archaeology__c != null)
+            skills += 'Archaeology__c:';
+        if(position.Geography__c != null)
+            skills += 'Geography__c:';
+        if(position.Geology__c != null)
+            skills += 'Geology__c:';
+        if(position.Hydrology__c != null)
+            skills += 'Hydrology__c:';
+        if(position.Soil_Science__c != null)
+        skills += 'Soil_Science__c:';
+        if(position.Ecology__c != null)
+            skills += 'Ecology__c:';
+        if(position.Cartography__c != null)
+            skills += 'Cartography__c:';
+        if(position.Atmospheric_Science__c != null)
+            skills += 'Atmospheric_Science__c:';
+        
+        // Natural Resources
+        if(position.Resource_Management__c != null)
+            skills += 'Resource_Management__c:';
+        if(position.Range_Management__c != null)
+            skills += 'Range_Management__c:';
+        if(position.Recreation_Management__c != null)
+            skills += 'Recreation_Management__c:';   
+        if(position.Urban_Studies__c != null)
+            skills += 'Urban_Studies__c:';
+        if(position.Landscape_Architecture__c != null)
+            skills += 'Landscape_Architecture__c:';
+        if(position.Historical_Preservation__c != null)
+            skills += 'Historical_Preservation__c:';
+        if(position.Sustainability__c != null)
+            skills += 'Sustainability__c:';
+        if(position.Wildlife_Management__c != null)
+            skills += 'Wildlife_Management__c:';    
+        
+        // Cultural Sciences
+        if(position.Anthropology__c != null)
+            skills += 'Anthropology__c:';
+        if(position.Native_American_Studies__c != null)
+            skills += 'Native_American_Studies__c:';
+        if(position.Natural_History__c != null)
+            skills += 'Natural_History__c:';
+        if(position.American_History__c != null)
+            skills += 'American_History__c:';
+        if(position.History__c != null)
+            skills += 'History__c:';
+        
+        // Creative skills/Fine Arts
+        if(position.Photography__c != null)
+            skills += 'Photography__c:';
+        if(position.Publishing__c != null)
+            skills += 'Publishing__c:';
+        
+        // Business skills
+        if(position.Economics__c != null)
+            skills += 'Economics__c:';
+        if(position.Marketing__c != null)
+            skills += 'Marketing__c:';
+        if(position.Communications__c != null)
+            skills += 'Communications__c:';
+        
+        // Public Safety/Health
+        if(position.Risk_Management2__c != null)
+            skills += 'Risk_Management2__c:';
+        if(position.Public_Safety_Health__c != null)
+            skills += 'Public_Safety_Health__c:';*/
+        
+        System.debug('Skills===>'+skills);
+        return skills;
+    }
+    
+     // Method called on to check selected Educations 
+   public Integer countEducations(Position__c position){
+        Integer i = 0;
+        
+    if(position.Atmospheric_Science__c != null)
+    i++;         
+    if(position.Biology__c != null)
+            i++;    
+    if(position.Botany__c != null)
+            i++;    
+    if(position.Communications__c != null)
+         i++;
+        
+    if(position.Geology__c != null)
+            i++;
+        
+    if(position.Ecological_Restoration__c != null)
+            i++;
+       
+    if(position.Education__c != null)
+            i++;
+    if(position.Forestry__c != null)
+            i++;
+    if(position.History__c != null)
+            i++;
+    if(position.Mathematics__c != null)
+            i++;
+    if(position.Recreation_Management__c != null)
+            i++;
+    if(position.Resource_Management__c != null)
+            i++;
+    if(position.Anthropology__c != null)
+            i++;
+    return i;
+    }
+    
+    // Method called on to check selected Skills
+   public Integer countSkills(Position__c position){
+        Integer i =0;
+        
+        if(position.Heavy_Equipment__c != null)
+            i++;
+        if(position.Backpacking__c != null)
+            i++;
+        if(position.BirdIdentification__c != null)
+            i++;
+        if(position.Boating__c != null)
+            i++;
+        if(position.Camping__c != null)
+            i++;
+        if(position.Computer_Science__c != null)
+            i++;
+        if(position.Carpentry__c != null)
+            i++;
+        if(position.Chain_Saw_Skills__c != null)
+            i++;
+        if(position.Community_Engagement__c != null)
+            i++;
+        if(position.Customer_Service__c != null)
+            i++;
+        
+       if(position.Statistics__c != null)
+            i++;
+        if(position.Data_Entry__c != null)
+            i++;
+        if(position.Field_Research__c != null)
+            i++;
+        if(position.Hunting__c != null)
+            i++;
+        
+        if(position.GIS__c != null)
+            i++;
+        if(position.GPS__c != null)
+            i++;
+        if(position.Hand_Tools__c != null)
+            i++;
+        if(position.Leadership_Experience__c != null)
+            i++;
+        if(position.Money_Handling__c != null)
+            i++;
+        if(position.Orienteering_compass_skills__c != null)
+          i++;
+        if(position.Plant_Identification__c != null)
+            i++;
+        if(position.Photography__c != null)
+            i++;
+        if(position.Public_Speaking__c != null)
+            i++;
+        if(position.Information_Technology__c != null)
+            i++;
+        if(position.Swimming__c != null)
+            i++;
+        if(position.Trail_Maintenance__c != null)
+            i++;
+        if(position.Volunteer_Coordination__c != null)
+            i++;
+        if(position.Web_Site_Design__c != null)
+            i++;
+            
+        
+        if(position.Horseback_Riding__c != null)
+            i++;
+        if(position.Working_with_Children__c != null)
+            i++;
+        if(position.Publishing__c != null)
+            i++;
+        
+        
+        return i;   
+    }
+}
