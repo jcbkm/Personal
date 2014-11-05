@@ -1,0 +1,16 @@
+docsQuery = 'Select ID,Candidate__c,Position__c,Application__c,Fit_Rating__c,Candidate_Status__c,Position__r.AutoSendLabel_Percent__c,
+			
+			
+	Position__r.Budget_Code__c,Position__r.Web_Approved__c,Position__r.Special_Recruiting__c,Position__r.Filled_Status__c,	Position__r.Start_Auto_Sending__c
+
+	from Candidate_to_Position__c where (Candidate_Status__c =\''+ strStatusInt +'\' OR Candidate_Status__c =\''+ strStatusRec +'\') and (
+	
+	Position__r.Budget_Code__c =\''+ budget1 +'\' OR Position__r.Budget_Code__c =\''+ budget2 +'\') and	Position__r.Filled_Status__c <> \''+ strFilledStatus +'\'
+
+	and Position__r.Web_Approved__c = True and Position__r.Special_Recruiting__c = Null and Position__r.RecordTypeId =\''+ recTypeId +'\' and 
+	
+	Application__r.RecordTypeId=\''+ recType.Id +'\' and Position__r.Start_Auto_Sending__c <='+ String.valueOf(todayDate) +'and 
+	
+	Position__r.Start_Auto_Sending__c != Null and Position__r.Stop_Auto_Send__c = false and Fit_Rating__c >=50 and Auto_Sent__c = false and 
+	
+	Application__r.Overall_Application_Submission_Status__c !=\'' + status1 + '\'';     
