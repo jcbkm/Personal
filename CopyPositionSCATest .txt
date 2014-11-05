@@ -725,6 +725,7 @@ public class CopyPositionSCA
             skills += 'Horticulture__c:';
         if(position.Ecological_Restoration__c != null)
             skills += 'Ecological_Restoration__c:';
+			
         //if(position.Landscape_Design__c != null)
            // skills += 'Landscape_Design__c:';
         if(position.Plant_Taxonomy__c != null)
