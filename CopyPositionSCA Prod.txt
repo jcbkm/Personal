@@ -351,7 +351,7 @@ public class CopyPositionSCA
         ClonePosition.Landscape_Design__c =  Position.Landscape_Design__c;
        // ClonePosition.Plant_Taxonomy__c =  Position.Plant_Taxonomy__c;
         ClonePosition.Wildlife_Biology__c =  Position.Wildlife_Biology__c;
-       // ClonePosition.Ecology__c=  Position.Ecology__c;
+      // ClonePosition.Ecology__c=  Position.Ecology__c;
         ClonePosition.Atmospheric_Science__c=  Position.Atmospheric_Science__c;
         ClonePosition.Risk_Management2__c =  Position.Risk_Management2__c;
         ClonePosition.Public_Safety_Health__c =  Position.Public_Safety_Health__c;
@@ -582,8 +582,8 @@ public class CopyPositionSCA
             skills += 'Communications__c:';
         if(position.Geology__c != null)
             skills += 'Geology__c:';
-       // if(position.Ecology__c != null)
-        //    skills += 'Ecology__c:';
+        if(position.Ecology__c != null)
+           skills += 'Ecology__c:';
         
         // Tools and Equipment
         if(position.Education__c != null)
@@ -817,10 +817,10 @@ public class CopyPositionSCA
     if(position.Communications__c != null)
          i++;
         
-    if(position.Geology__c != null)
+        if(position.Geology__c != null)
             i++;
         
-    if(position.Ecological_Restoration__c != null)
+       if(position.Ecological_Restoration__c != null)
             i++;
        
     if(position.Education__c != null)
