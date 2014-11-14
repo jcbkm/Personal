@@ -351,7 +351,7 @@ public class CopyPositionSCA
         ClonePosition.Landscape_Design__c =  Position.Landscape_Design__c;
        // ClonePosition.Plant_Taxonomy__c =  Position.Plant_Taxonomy__c;
         ClonePosition.Wildlife_Biology__c =  Position.Wildlife_Biology__c;
-       // ClonePosition.Ecology__c=  Position.Ecology__c;
+        ClonePosition.Ecology__c=  Position.Ecology__c;
         ClonePosition.Atmospheric_Science__c=  Position.Atmospheric_Science__c;
         ClonePosition.Risk_Management2__c =  Position.Risk_Management2__c;
         ClonePosition.Public_Safety_Health__c =  Position.Public_Safety_Health__c;
